@@ -1,16 +1,25 @@
 import { useState, useEffect } from 'react';
-import { Target, Calendar, TrendingUp, Mail, Phone, Users, Flame, Trophy, Save, X, Edit2 } from 'lucide-react';
+import { Target, Calendar, TrendingUp, Mail, Phone, Users, Flame, Trophy, Save, X, Edit2, Gift, Star } from 'lucide-react';
 import useGamification from '../hooks/useGamification';
 
+// Bonus points for hitting goals
+const GOAL_BONUS_POINTS = {
+  coldEmails: 25,
+  followUps: 20,
+  responses: 30,
+  calls: 40,
+};
+
+// Only 4 core goals
 const GOAL_METRICS = [
-  { id: 'coldEmails', name: 'Cold Emails', icon: Mail, color: 'blue', defaultTarget: 20 },
-  { id: 'followUps', name: 'Follow Ups', icon: TrendingUp, color: 'green', defaultTarget: 15 },
-  { id: 'calls', name: 'Calls/Meetings', icon: Phone, color: 'purple', defaultTarget: 10 },
-  { id: 'newContacts', name: 'New Contacts', icon: Users, color: 'orange', defaultTarget: 10 },
-  { id: 'responseRate', name: 'Response Rate %', icon: Target, color: 'pink', defaultTarget: 30 },
-  { id: 'streak', name: 'Streak Days', icon: Flame, color: 'red', defaultTarget: 20 },
-  { id: 'totalScore', name: 'Total Score', icon: Trophy, color: 'yellow', defaultTarget: 500 },
+  { id: 'coldEmails', name: 'Messages Sent', icon: Mail, color: 'blue', defaultTarget: 20, bonusPoints: 25 },
+  { id: 'followUps', name: 'Follow Ups', icon: TrendingUp, color: 'green', defaultTarget: 15, bonusPoints: 20 },
+  { id: 'responses', name: 'Responses Received', icon: Target, color: 'cyan', defaultTarget: 10, bonusPoints: 30 },
+  { id: 'calls', name: 'Calls/Meetings', icon: Phone, color: 'purple', defaultTarget: 10, bonusPoints: 40 },
 ];
+
+// Export for use in Settings
+export { GOAL_METRICS };
 
 const GoalSetting = ({ compact = false }) => {
   const { goals, setMonthlyGoals, loading, refreshScores } = useGamification();
@@ -79,6 +88,19 @@ const GoalSetting = ({ compact = false }) => {
   }
 
   if (compact) {
+    // Calculate completed goals
+    const completedGoals = GOAL_METRICS.filter(metric => {
+      const target = goals.targets?.[metric.id] || metric.defaultTarget;
+      const current = goals.progress?.[metric.id] || 0;
+      return target > 0 && current >= target;
+    }).length;
+    
+    const earnedBonus = GOAL_METRICS.filter(metric => {
+      const target = goals.targets?.[metric.id] || metric.defaultTarget;
+      const current = goals.progress?.[metric.id] || 0;
+      return target > 0 && current >= target;
+    }).reduce((sum, m) => sum + m.bonusPoints, 0);
+    
     return (
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex items-center justify-between mb-4">
@@ -86,7 +108,14 @@ const GoalSetting = ({ compact = false }) => {
             <Target className="text-purple-500" size={20} />
             <h3 className="font-semibold text-gray-900">Monthly Goals</h3>
           </div>
-          <span className="text-sm font-medium text-purple-600">{overallProgress}%</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-purple-600">{overallProgress}%</span>
+            {earnedBonus > 0 && (
+              <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Star size={12} />+{earnedBonus}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Compact progress bar */}
@@ -101,25 +130,45 @@ const GoalSetting = ({ compact = false }) => {
             style={{ width: `${Math.min(overallProgress, 100)}%` }}
           />
         </div>
+        
+        {/* Summary row */}
+        <div className="flex items-center justify-between mb-3 text-sm">
+          <span className="text-gray-600">{completedGoals}/{GOAL_METRICS.length} goals completed</span>
+          {earnedBonus > 0 && (
+            <span className="text-yellow-600 font-medium">+{earnedBonus} bonus pts</span>
+          )}
+        </div>
 
-        {/* Top 3 goals */}
+        {/* Top 4 goals */}
         <div className="space-y-2">
-          {GOAL_METRICS.slice(0, 3).map(metric => {
+          {GOAL_METRICS.slice(0, 4).map(metric => {
             const target = goals.targets?.[metric.id] || metric.defaultTarget;
             const current = goals.progress?.[metric.id] || 0;
             const progress = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+            const isComplete = progress >= 100;
             
             return (
               <div key={metric.id} className="flex items-center gap-3">
-                <metric.icon size={16} className={`text-${metric.color}-500`} />
+                <div className={`w-6 h-6 rounded flex items-center justify-center ${isComplete ? 'bg-green-100' : 'bg-gray-100'}`}>
+                  {isComplete ? (
+                    <span className="text-green-600 text-xs">✓</span>
+                  ) : (
+                    <metric.icon size={14} className={`text-${metric.color}-500`} />
+                  )}
+                </div>
                 <div className="flex-1">
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-600">{metric.name}</span>
-                    <span className="text-gray-900 font-medium">{current}/{target}</span>
+                    <span className={`${isComplete ? 'text-green-600 font-medium' : 'text-gray-600'}`}>
+                      {metric.name}
+                    </span>
+                    <span className="text-gray-900 font-medium">
+                      {current}/{target}
+                      {isComplete && <span className="ml-1 text-yellow-600">+{metric.bonusPoints}</span>}
+                    </span>
                   </div>
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                     <div 
-                      className={`h-full bg-${metric.color}-500 transition-all`}
+                      className={`h-full transition-all ${isComplete ? 'bg-green-500' : `bg-${metric.color}-500`}`}
                       style={{ width: `${progress}%` }}
                     />
                   </div>
@@ -199,7 +248,7 @@ const GoalSetting = ({ compact = false }) => {
           </div>
           {overallProgress >= 100 && (
             <p className="text-sm text-green-600 mt-2 flex items-center gap-1">
-              <Trophy size={16} /> All goals achieved! 🎉
+              <Trophy size={16} /> All goals achieved! 🎉 +{GOAL_METRICS.reduce((sum, m) => sum + m.bonusPoints, 0)} bonus points!
             </p>
           )}
         </div>
@@ -207,6 +256,17 @@ const GoalSetting = ({ compact = false }) => {
 
       {/* Goals list */}
       <div className="p-6">
+        {/* Bonus Points Info */}
+        <div className="mb-4 p-3 bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg">
+          <div className="flex items-center gap-2 text-yellow-700 text-sm">
+            <Gift size={18} className="text-yellow-600" />
+            <span className="font-medium">Earn bonus points for hitting goals!</span>
+          </div>
+          <p className="text-xs text-yellow-600 mt-1">
+            Complete each goal to earn bonus points. Hit all goals for a total of {GOAL_METRICS.reduce((sum, m) => sum + m.bonusPoints, 0)} extra points!
+          </p>
+        </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {GOAL_METRICS.map(metric => {
             const target = isEditing 
@@ -259,6 +319,8 @@ const GoalCard = ({ metric, target, current, progress, isComplete, isEditing, on
     pink: { bg: 'bg-pink-100', text: 'text-pink-600', bar: 'bg-pink-500', border: 'border-pink-200' },
     red: { bg: 'bg-red-100', text: 'text-red-600', bar: 'bg-red-500', border: 'border-red-200' },
     yellow: { bg: 'bg-yellow-100', text: 'text-yellow-600', bar: 'bg-yellow-500', border: 'border-yellow-200' },
+    cyan: { bg: 'bg-cyan-100', text: 'text-cyan-600', bar: 'bg-cyan-500', border: 'border-cyan-200' },
+    indigo: { bg: 'bg-indigo-100', text: 'text-indigo-600', bar: 'bg-indigo-500', border: 'border-indigo-200' },
   };
   
   const colors = colorClasses[metric.color] || colorClasses.blue;
@@ -294,9 +356,18 @@ const GoalCard = ({ metric, target, current, progress, isComplete, isEditing, on
             )}
           </div>
         </div>
-        {isComplete && (
-          <span className="text-green-500 text-xl">✓</span>
-        )}
+        <div className="text-right">
+          {isComplete ? (
+            <div className="flex flex-col items-end">
+              <span className="text-green-500 text-xl">✓</span>
+              <span className="text-xs text-yellow-600 font-medium flex items-center gap-1">
+                <Star size={12} />+{metric.bonusPoints}
+              </span>
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400">+{metric.bonusPoints} pts</span>
+          )}
+        </div>
       </div>
 
       {/* Progress bar */}

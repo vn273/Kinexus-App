@@ -1,20 +1,23 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Edit2, Check, X, RotateCcw, Settings as SettingsIcon } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit2, Check, X, RotateCcw, Settings as SettingsIcon, Target, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSettings } from '../contexts/SettingsContext';
+import { GOAL_METRICS } from '../components/GoalSetting';
 
 const Settings = () => {
   const { currentUser } = useAuth();
   const { 
     relationshipTypes, 
     sectors, 
+    monthlyGoalTargets,
     addRelationshipType, 
     removeRelationshipType,
     updateRelationshipType,
     addSector, 
     removeSector,
     updateSector,
+    updateMonthlyGoalTargets,
     resetToDefaults,
     loading 
   } = useSettings();
@@ -26,6 +29,35 @@ const Settings = () => {
   const [editingSector, setEditingSector] = useState(null);
   const [editingSectorLabel, setEditingSectorLabel] = useState('');
   const [error, setError] = useState('');
+  
+  // Monthly goal targets state
+  const [goalTargets, setGoalTargets] = useState({});
+  const [savingGoals, setSavingGoals] = useState(false);
+  
+  // Initialize goal targets from settings
+  useEffect(() => {
+    if (monthlyGoalTargets) {
+      setGoalTargets(monthlyGoalTargets);
+    } else {
+      // Set defaults from GOAL_METRICS
+      const defaults = {};
+      GOAL_METRICS.forEach(m => {
+        defaults[m.id] = m.defaultTarget;
+      });
+      setGoalTargets(defaults);
+    }
+  }, [monthlyGoalTargets]);
+  
+  const handleSaveGoalTargets = async () => {
+    setSavingGoals(true);
+    try {
+      await updateMonthlyGoalTargets(goalTargets);
+      setError('');
+    } catch (err) {
+      setError('Failed to save goal targets');
+    }
+    setSavingGoals(false);
+  };
 
   const handleAddRelationshipType = async () => {
     if (!newRelationshipType.trim()) return;
@@ -340,6 +372,68 @@ const Settings = () => {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Monthly Goal Targets */}
+        <div className="mt-8 bg-white rounded-lg shadow-sm border border-gray-200">
+          <div className="p-4 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Target size={20} className="text-purple-600" />
+                  Monthly Goal Targets
+                </h2>
+                <p className="text-sm text-gray-600">Set your monthly targets for each goal (resets on the 1st)</p>
+              </div>
+              <button
+                onClick={handleSaveGoalTargets}
+                disabled={savingGoals}
+                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:opacity-50 transition-colors"
+              >
+                <Save size={16} />
+                {savingGoals ? 'Saving...' : 'Save Targets'}
+              </button>
+            </div>
+          </div>
+          
+          <div className="p-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {GOAL_METRICS.map(metric => {
+                const Icon = metric.icon;
+                return (
+                  <div 
+                    key={metric.id}
+                    className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg"
+                  >
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center bg-${metric.color}-100`}>
+                      <Icon size={20} className={`text-${metric.color}-600`} />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {metric.name}
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={goalTargets[metric.id] || metric.defaultTarget}
+                        onChange={(e) => setGoalTargets(prev => ({
+                          ...prev,
+                          [metric.id]: parseInt(e.target.value) || 0
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                      />
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      +{metric.bonusPoints} pts
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-gray-500 mt-4">
+              💡 Earn bonus points when you hit each goal. Progress is calculated from your networking leads.
+            </p>
           </div>
         </div>
       </main>

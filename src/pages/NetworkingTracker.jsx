@@ -2,12 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useContacts } from '../contexts/ContactContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { 
   Upload, Download, Plus, TrendingUp, User, Search,
   Users, Phone, Clock, CheckCircle2, ChevronDown, ChevronRight,
   ArrowUpDown, CheckSquare, Square, Trash2, Calendar, Share2, Settings, Trophy, Flame, Target
 } from 'lucide-react';
-import NetworkingLeadCard from '../components/NetworkingLeadCard';
+import NetworkingLeadCardCompact from '../components/NetworkingLeadCardCompact';
+import LeadDetailPanel from '../components/LeadDetailPanel';
 import LeadForm from '../components/LeadForm';
 import DuplicateWarningModal from '../components/DuplicateWarningModal';
 import AIAssistant from '../components/AIAssistant';
@@ -38,6 +40,7 @@ const BATCH_DUPLICATE_THRESHOLD = 10;
 const NetworkingTracker = () => {
   const { currentUser } = useAuth();
   const { addContact, checkDuplicates, contacts } = useContacts();
+  const { monthlyGoalTargets } = useSettings();
   const { 
     score, 
     streak, 
@@ -46,6 +49,7 @@ const NetworkingTracker = () => {
     currentMultiplier,
     logNetworkingActivity,
     refreshScores,
+    syncGoalsFromLeads,
     loading: gamificationLoading 
   } = useGamification();
   
@@ -53,6 +57,7 @@ const NetworkingTracker = () => {
   const [loading, setLoading] = useState(true);
   const [statistics, setStatistics] = useState(null);
   const [showGamification, setShowGamification] = useState(true);
+  const [selectedLead, setSelectedLead] = useState(null); // For split-screen detail view
   const [expandedSections, setExpandedSections] = useState({
     'Follow-up Needed': true,
     'Pending Response': true,
@@ -114,6 +119,9 @@ const NetworkingTracker = () => {
       const fetchedLeads = await networkingService.getNetworkingLeads(currentUser.uid);
       setLeads(fetchedLeads);
       setStatistics(networkingService.getLeadStatistics(fetchedLeads));
+      
+      // Sync goals and scores from lead data
+      await syncGoalsFromLeads(fetchedLeads, monthlyGoalTargets);
     } catch (error) {
       console.error('Error loading leads:', error);
       setLeads([]);
@@ -433,6 +441,10 @@ const NetworkingTracker = () => {
     }
     
     await loadLeads();
+    
+    // Recalculate scores from updated leads
+    const updatedLeads = await networkingService.getNetworkingLeads(currentUser.uid);
+    await syncGoalsFromLeads(updatedLeads, monthlyGoalTargets);
   };
   
   // Batch import handlers
@@ -467,8 +479,19 @@ const NetworkingTracker = () => {
       await networkingService.updateNetworkingLead(lead.id, {
         ...lead,
         followUpDate: new Date(),
-        notes: notes || lead.notes
+        notes: notes || lead.notes,
+        reachedOut: true
       });
+      
+      // Log gamification activity
+      if (currentUser) {
+        await logNetworkingActivity('follow_up', {
+          leadId: lead.id,
+          leadName: `${lead.firstName} ${lead.lastName}`,
+          company: lead.firm
+        });
+      }
+      
       await loadLeads();
     } catch (error) {
       console.error('Error updating lead:', error);
@@ -482,6 +505,16 @@ const NetworkingTracker = () => {
     
     try {
       await networkingService.logResponse(lead.id, notes);
+      
+      // Log gamification activity for response received
+      if (currentUser) {
+        await logNetworkingActivity('response_received', {
+          leadId: lead.id,
+          leadName: `${lead.firstName} ${lead.lastName}`,
+          company: lead.firm
+        });
+      }
+      
       await loadLeads();
     } catch (error) {
       console.error('Error logging response:', error);
@@ -501,6 +534,16 @@ const NetworkingTracker = () => {
       }
       
       await networkingService.scheduleCall(lead.id, callDate);
+      
+      // Log gamification activity for call scheduled
+      if (currentUser) {
+        await logNetworkingActivity('call_scheduled', {
+          leadId: lead.id,
+          leadName: `${lead.firstName} ${lead.lastName}`,
+          company: lead.firm,
+          callDate: callDate.toISOString()
+        });
+      }
       
       // Auto-convert to contact when call is scheduled (if not already linked)
       if (!lead.linkedContactId) {
@@ -666,6 +709,14 @@ const NetworkingTracker = () => {
     
     try {
       await networkingService.deleteNetworkingLead(lead.id);
+      
+      // Log deletion activity to deduct points
+      await logNetworkingActivity('lead_deleted', {
+        leadId: lead.id,
+        leadName: `${lead.firstName} ${lead.lastName}`,
+        company: lead.firm
+      });
+      
       await loadLeads();
       alert('Lead deleted successfully');
     } catch (error) {
@@ -735,6 +786,15 @@ const NetworkingTracker = () => {
         
         // No duplicates, add the lead
         await networkingService.addNetworkingLead(currentUser.uid, formData);
+        
+        // Log gamification activity for lead added
+        if (currentUser) {
+          await logNetworkingActivity('lead_added', {
+            leadName: `${formData.firstName} ${formData.lastName}`,
+            company: formData.firm
+          });
+        }
+        
         alert('Lead added successfully!');
         setShowLeadForm(false);
         setEditingLead(null);
@@ -810,7 +870,7 @@ const NetworkingTracker = () => {
   }
   
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-24">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="flex items-center justify-between mb-4">
@@ -1093,155 +1153,182 @@ const NetworkingTracker = () => {
           </div>
         )}
         
-        {/* Networking Metrics Section */}
-        {statistics && (
-          <div className={`${showGamification ? 'mt-6' : 'mt-0'}`}>
-            {showGamification && (
-              <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                <Users size={20} className="text-blue-600" />
-                Networking Metrics
-              </h3>
-            )}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="bg-blue-50 p-3 rounded-lg">
-                <div className="text-sm text-blue-600 font-medium">Active Leads</div>
-                <div className="text-2xl font-bold text-blue-900">{statistics.active}</div>
-              </div>
-              
-              <div className="bg-green-50 p-3 rounded-lg">
-                <div className="text-sm text-green-600 font-medium">Response Rate</div>
-                <div className="text-2xl font-bold text-green-900">{statistics.responseRate}%</div>
-                <div className="text-xs text-green-700">
-                  {statistics.responded}/{statistics.total}
-                </div>
-              </div>
-              
-              <div className="bg-purple-50 p-3 rounded-lg">
-                <div className="text-sm text-purple-600 font-medium">Call Conversion</div>
-                <div className="text-2xl font-bold text-purple-900">{statistics.callConversionRate}%</div>
-                <div className="text-xs text-purple-700">
-                  {statistics.callsScheduled}/{statistics.total}
-                </div>
-              </div>
-              
-              <div className="bg-yellow-50 p-3 rounded-lg">
-                <div className="text-sm text-yellow-600 font-medium">Avg Response Time</div>
-                <div className="text-2xl font-bold text-yellow-900">
-                  {statistics.avgResponseTime !== null ? statistics.avgResponseTime : '—'}
-                </div>
-                <div className="text-xs text-yellow-700">
-                  {statistics.avgResponseTime !== null ? 'days' : 'no data'}
-                </div>
-              </div>
-              
-              <div className="bg-indigo-50 p-3 rounded-lg">
-                <div className="text-sm text-indigo-600 font-medium">Converted</div>
-                <div className="text-2xl font-bold text-indigo-900">{statistics.converted}</div>
-                <div className="text-xs text-indigo-700">contacts</div>
-              </div>
+        {/* Networking Metrics Section - Removed from header, now in sticky footer */}
+      </div>
+      
+      {/* Main content with split-screen layout */}
+      <div className={`flex ${selectedLead ? 'h-[calc(100vh-200px)]' : ''}`}>
+        {/* Leads List - Takes full width or half when detail panel is open */}
+        <div className={`${selectedLead ? 'w-1/2 border-r border-gray-200 overflow-y-auto' : 'w-full'} p-6`}>
+          {leads.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
+              <TrendingUp size={48} className="mx-auto text-gray-400 mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Networking Leads Yet</h3>
+              <p className="text-gray-600 mb-4">Import a CSV or add your first lead to get started</p>
+              <label className="inline-flex items-center gap-2 px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors cursor-pointer">
+                <Upload size={18} />
+                Import CSV
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleImport}
+                  className="hidden"
+                />
+              </label>
             </div>
+          ) : (
+            <div className="space-y-4">
+              {Object.entries(groupedLeads).map(([status, statusLeads]) => {
+                if (statusLeads.length === 0) return null;
+                
+                const isExpanded = expandedSections[status];
+                
+                return (
+                  <div key={status} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <button
+                      onClick={() => toggleSection(status)}
+                      className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <h2 className="text-sm font-semibold text-gray-900">
+                          {status.toUpperCase()} ({statusLeads.length})
+                        </h2>
+                        {status === 'Follow-up Needed' && (
+                          <span className="text-xs text-red-600">⚠️ Needs attention</span>
+                        )}
+                      </div>
+                      <span className="text-gray-500 text-sm">
+                        {isExpanded ? '▲' : '▼'}
+                      </span>
+                    </button>
+                    
+                    {isExpanded && (
+                      <div className="p-3 space-y-2">
+                        {statusLeads.map(lead => (
+                          <div 
+                            key={lead.id} 
+                            className="relative"
+                            onClick={(e) => {
+                              // Auto-activate select mode on shift+click
+                              if (e.shiftKey && !isSelectMode) {
+                                setIsSelectMode(true);
+                                handleSelectLead(lead.id, e);
+                              }
+                            }}
+                          >
+                            {isSelectMode && (
+                              <div
+                                className="absolute top-3 left-3 z-10 cursor-pointer"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelectLead(lead.id, e);
+                                }}
+                              >
+                                {selectedIds.has(lead.id) ? (
+                                  <CheckSquare className="text-blue-600" size={20} />
+                                ) : (
+                                  <Square className="text-gray-400 hover:text-gray-600" size={20} />
+                                )}
+                              </div>
+                            )}
+                            <div className={isSelectMode ? 'pl-8' : ''}>
+                              <NetworkingLeadCardCompact
+                                lead={lead}
+                                isSelected={selectedLead?.id === lead.id}
+                                onClick={() => setSelectedLead(lead)}
+                                onFollowUp={handleFollowUp}
+                                onLogResponse={handleLogResponse}
+                                onScheduleCall={handleScheduleCall}
+                                onConvert={handleConvert}
+                                onMarkDead={handleMarkDead}
+                                onEdit={handleEdit}
+                                onDelete={handleDelete}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        
+        {/* Lead Detail Panel - Shows on right when a lead is selected */}
+        {selectedLead && (
+          <div className="w-1/2 h-full overflow-hidden">
+            <LeadDetailPanel
+              lead={selectedLead}
+              onClose={() => setSelectedLead(null)}
+              onFollowUp={(lead) => { handleFollowUp(lead); setSelectedLead({...lead}); }}
+              onLogResponse={(lead) => { handleLogResponse(lead); }}
+              onScheduleCall={(lead) => { handleScheduleCall(lead); }}
+              onConvert={handleConvert}
+              onMarkDead={handleMarkDead}
+              onEdit={handleEdit}
+              onDelete={(lead) => { handleDelete(lead); setSelectedLead(null); }}
+            />
           </div>
         )}
       </div>
       
-      {/* Main content */}
-      <div className="p-6 max-w-7xl mx-auto">
-        {leads.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg border-2 border-dashed border-gray-300">
-            <TrendingUp size={48} className="mx-auto text-gray-400 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Networking Leads Yet</h3>
-            <p className="text-gray-600 mb-4">Import a CSV or add your first lead to get started</p>
-            <label className="inline-flex items-center gap-2 px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors cursor-pointer">
-              <Upload size={18} />
-              Import CSV
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleImport}
-                className="hidden"
-              />
-            </label>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {Object.entries(groupedLeads).map(([status, statusLeads]) => {
-              if (statusLeads.length === 0) return null;
+      {/* Sticky Bottom Metrics Bar */}
+      {statistics && (
+        <div className="fixed bottom-0 left-0 right-0 bg-gradient-to-r from-slate-900 to-slate-800 border-t border-slate-700 px-6 py-3 z-40">
+          <div className="max-w-7xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-2">
+                <Users size={18} className="text-blue-400" />
+                <span className="text-slate-300 text-sm">Active:</span>
+                <span className="text-white font-bold">{statistics.active}</span>
+              </div>
               
-              const isExpanded = expandedSections[status];
+              <div className="h-6 w-px bg-slate-700" />
               
-              return (
-                <div key={status} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                  <button
-                    onClick={() => toggleSection(status)}
-                    className="w-full flex items-center justify-between px-6 py-4 bg-gray-50 hover:bg-gray-100 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-lg font-semibold text-gray-900">
-                        {status.toUpperCase()} ({statusLeads.length})
-                      </h2>
-                      {status === 'Follow-up Needed' && (
-                        <span className="text-sm text-red-600">⚠️ These leads need your attention</span>
-                      )}
-                      {status === 'Pending Response' && (
-                        <span className="text-sm text-gray-600">Waiting to hear back</span>
-                      )}
-                    </div>
-                    <span className="text-gray-500">
-                      {isExpanded ? '▲' : '▼'}
-                    </span>
-                  </button>
-                  
-                  {isExpanded && (
-                    <div className="p-6 space-y-4">
-                      {statusLeads.map(lead => (
-                        <div 
-                          key={lead.id} 
-                          className="relative"
-                          onClick={(e) => {
-                            // Auto-activate select mode on shift+click
-                            if (e.shiftKey && !isSelectMode) {
-                              setIsSelectMode(true);
-                              handleSelectLead(lead.id, e);
-                            }
-                          }}
-                        >
-                          {isSelectMode && (
-                            <div
-                              className="absolute top-3 left-3 z-10 cursor-pointer"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSelectLead(lead.id, e);
-                              }}
-                            >
-                              {selectedIds.has(lead.id) ? (
-                                <CheckSquare className="text-blue-600" size={20} />
-                              ) : (
-                                <Square className="text-gray-400 hover:text-gray-600" size={20} />
-                              )}
-                            </div>
-                          )}
-                          <div className={isSelectMode ? 'pl-8' : ''}>
-                            <NetworkingLeadCard
-                              lead={lead}
-                              onFollowUp={handleFollowUp}
-                              onLogResponse={handleLogResponse}
-                              onScheduleCall={handleScheduleCall}
-                              onConvert={handleConvert}
-                              onMarkDead={handleMarkDead}
-                              onEdit={handleEdit}
-                              onDelete={handleDelete}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              <div className="flex items-center gap-2">
+                <TrendingUp size={18} className="text-green-400" />
+                <span className="text-slate-300 text-sm">Response Rate:</span>
+                <span className="text-white font-bold">{statistics.responseRate}%</span>
+                <span className="text-slate-500 text-xs">({statistics.responded}/{statistics.total})</span>
+              </div>
+              
+              <div className="h-6 w-px bg-slate-700" />
+              
+              <div className="flex items-center gap-2">
+                <Phone size={18} className="text-purple-400" />
+                <span className="text-slate-300 text-sm">Call Rate:</span>
+                <span className="text-white font-bold">{statistics.callConversionRate}%</span>
+                <span className="text-slate-500 text-xs">({statistics.callsScheduled}/{statistics.total})</span>
+              </div>
+              
+              <div className="h-6 w-px bg-slate-700" />
+              
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-indigo-400" />
+                <span className="text-slate-300 text-sm">Converted:</span>
+                <span className="text-white font-bold">{statistics.converted}</span>
+              </div>
+            </div>
+            
+            {/* Quick Gamification Stats */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full">
+                <Trophy size={16} className="text-yellow-400" />
+                <span className="text-white font-medium">{(score?.totalScore || 0).toLocaleString()} pts</span>
+              </div>
+              
+              {streak?.currentStreak > 0 && (
+                <div className="flex items-center gap-2 bg-orange-500/20 px-3 py-1.5 rounded-full">
+                  <Flame size={16} className="text-orange-400" />
+                  <span className="text-orange-300 font-medium">{streak.currentStreak}-day streak</span>
                 </div>
-              );
-            })}
+              )}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Lead Form Modal */}
       {showLeadForm && (

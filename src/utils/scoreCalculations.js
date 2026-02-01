@@ -16,13 +16,22 @@ export const SCORE_TIERS = [
 
 // Activity point values
 export const ACTIVITY_POINTS = {
+  // General activities
   cold_outreach: 5,
   warm_intro_request: 10,
   coffee_chat: 25,
   call_completed: 25,
   follow_up: 3,
   contact_added: 10,
-  lead_converted: 30
+  lead_converted: 30,
+  
+  // Networking lead activities
+  lead_added: 8,
+  lead_deleted: -8, // Deduct points when deleting a lead
+  message_sent: 5,
+  response_received: 15,
+  call_scheduled: 20,
+  lead_status_advanced: 10
 };
 
 // Streak multipliers

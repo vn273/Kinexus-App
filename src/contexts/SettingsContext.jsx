@@ -21,6 +21,7 @@ export const SettingsProvider = ({ children }) => {
   const { currentUser } = useAuth();
   const [relationshipTypes, setRelationshipTypes] = useState(DEFAULT_RELATIONSHIP_TYPES);
   const [sectors, setSectors] = useState(DEFAULT_SECTORS);
+  const [monthlyGoalTargets, setMonthlyGoalTargets] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Load settings when user changes
@@ -29,6 +30,7 @@ export const SettingsProvider = ({ children }) => {
       if (!currentUser) {
         setRelationshipTypes(DEFAULT_RELATIONSHIP_TYPES);
         setSectors(DEFAULT_SECTORS);
+        setMonthlyGoalTargets(null);
         setLoading(false);
         return;
       }
@@ -37,6 +39,7 @@ export const SettingsProvider = ({ children }) => {
         const settings = await getUserSettings(currentUser.uid);
         setRelationshipTypes(settings.relationshipTypes || DEFAULT_RELATIONSHIP_TYPES);
         setSectors(settings.sectors || DEFAULT_SECTORS);
+        setMonthlyGoalTargets(settings.monthlyGoalTargets || null);
       } catch (error) {
         console.error('Error loading settings:', error);
       } finally {
@@ -144,6 +147,15 @@ export const SettingsProvider = ({ children }) => {
     });
   };
 
+  // Update monthly goal targets
+  const updateMonthlyGoalTargets = async (targets) => {
+    if (!currentUser) return;
+    
+    setMonthlyGoalTargets(targets);
+    await saveUserSettings(currentUser.uid, { monthlyGoalTargets: targets });
+    return targets;
+  };
+
   // Helper to get label from value
   const getRelationshipTypeLabel = (value) => {
     const type = relationshipTypes.find(t => t.value === value);
@@ -158,6 +170,7 @@ export const SettingsProvider = ({ children }) => {
   const value = {
     relationshipTypes,
     sectors,
+    monthlyGoalTargets,
     loading,
     addRelationshipType,
     removeRelationshipType,
@@ -166,6 +179,7 @@ export const SettingsProvider = ({ children }) => {
     removeSector,
     updateSector,
     resetToDefaults,
+    updateMonthlyGoalTargets,
     getRelationshipTypeLabel,
     getSectorLabel
   };

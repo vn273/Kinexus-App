@@ -25,29 +25,36 @@ const toDate = (value) => {
 
 // Calculate status based on lead data
 export const calculateStatus = (lead) => {
+  // Already converted
   if (lead.linkedContactId) {
     return 'Converted to Contact';
   }
   
+  // Has a call scheduled - highest priority status
   if (lead.callScheduled) {
     return 'Call Scheduled';
   }
   
+  // If they have responded, stay as "Pending Response" regardless of time elapsed
+  // User should manually schedule a call or convert - old responses don't auto-move to follow-up
   if (lead.response) {
     return 'Pending Response';
   }
   
-  // Check if follow-up is needed (> 7 days since contact with no response)
-  const contactDate = toDate(lead.dateContacted);
-  const daysSinceContact = contactDate 
-    ? Math.floor((new Date() - contactDate) / (1000 * 60 * 60 * 24))
-    : 0;
-  
-  if (!lead.response && daysSinceContact > 7) {
-    return 'Follow-up Needed';
+  // No response yet - check if follow-up is needed (> 7 days since contact with no response)
+  if (lead.reachedOut) {
+    const contactDate = toDate(lead.dateReachedOut) || toDate(lead.dateContacted);
+    if (contactDate) {
+      const daysSinceContact = Math.floor((new Date() - contactDate) / (1000 * 60 * 60 * 24));
+      if (daysSinceContact > 7) {
+        return 'Follow-up Needed';
+      }
+    }
+    return 'Pending Response';
   }
   
-  return 'Pending Response';
+  // Haven't reached out yet
+  return 'Not Contacted';
 };
 
 // Calculate reminder date (7 days after first contact)

@@ -19,8 +19,14 @@ import {
   updateMonthlyGoals,
   toggleTargetCompany,
   calculateLocalStats,
-  getGamificationSummary
+  getGamificationSummary,
+  syncMonthlyGoalsFromLeads
 } from '../services/gamificationService';
+import {
+  calculateLeadStats,
+  getAllLeadStats,
+  LEAD_POINTS
+} from '../services/leadStatsService';
 import {
   ACHIEVEMENTS,
   getAchievementProgress,
@@ -44,6 +50,7 @@ const useGamification = () => {
   const [goals, setGoals] = useState({ targets: {}, progress: {} });
   const [companyScores, setCompanyScores] = useState([]);
   const [activities, setActivities] = useState([]);
+  const [leadStats, setLeadStats] = useState({ today: {}, month: {}, allTime: {} });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [newAchievements, setNewAchievements] = useState([]);
@@ -51,7 +58,7 @@ const useGamification = () => {
   // Load all gamification data
   const loadGamificationData = useCallback(async () => {
     if (!currentUser) {
-      // Demo mode - set demo data based on contacts
+      // Demo mode - set demo data with 4-goal structure
       const totalContacts = contacts?.length || 0;
       
       setScore({
@@ -68,25 +75,26 @@ const useGamification = () => {
         lastActivityDate: new Date().toISOString()
       });
       
+      // Demo mode with 4 goals only
       setGoals({
         targets: {
           coldEmails: 20,
           followUps: 15,
-          calls: 10,
-          newContacts: 10,
-          responseRate: 30,
-          streak: 20,
-          totalScore: 500
+          responses: 10,
+          calls: 10
         },
         progress: {
           coldEmails: 5,
           followUps: 3,
-          calls: 2,
-          newContacts: Math.min(totalContacts, 10),
-          responseRate: 25,
-          streak: 3,
-          totalScore: Math.min(totalContacts * 10 + 15, 500)
+          responses: 2,
+          calls: 2
         }
+      });
+      
+      setLeadStats({
+        today: { messagesSent: 0, followUps: 0, responses: 0, calls: 0, totalPoints: 0 },
+        month: { messagesSent: 5, followUps: 3, responses: 2, calls: 2, totalPoints: 95 },
+        allTime: { messagesSent: 20, followUps: 10, responses: 8, calls: 5, totalPoints: 350 }
       });
       
       setLoading(false);
@@ -186,6 +194,49 @@ const useGamification = () => {
     }
   }, [currentUser]);
 
+  // Sync monthly goals from lead data and calculate scores
+  const syncGoalsFromLeads = useCallback(async (leads = [], customTargets = null) => {
+    if (!currentUser) return;
+    
+    try {
+      // Calculate lead stats for all periods
+      const stats = getAllLeadStats(leads);
+      setLeadStats(stats);
+      
+      // Update score based on lead stats
+      setScore(prev => ({
+        ...prev,
+        totalScore: stats.allTime.totalPoints,
+        activityScore: stats.today.totalPoints
+      }));
+      
+      // Sync goals with lead data
+      const updatedGoals = await syncMonthlyGoalsFromLeads(currentUser.uid, leads, customTargets);
+      if (updatedGoals) {
+        setGoals(updatedGoals);
+      }
+      return { goals: updatedGoals, stats };
+    } catch (err) {
+      console.error('Error syncing goals from leads:', err);
+      throw err;
+    }
+  }, [currentUser]);
+
+  // Calculate scores from leads (local calculation without Firebase)
+  const calculateScoresFromLeads = useCallback((leads = []) => {
+    const stats = getAllLeadStats(leads);
+    setLeadStats(stats);
+    
+    // Update score based on lead stats
+    setScore(prev => ({
+      ...prev,
+      totalScore: stats.allTime.totalPoints,
+      activityScore: stats.today.totalPoints
+    }));
+    
+    return stats;
+  }, []);
+
   // Toggle target company
   const setTargetCompany = useCallback(async (companyName, isTarget) => {
     if (!currentUser) return;
@@ -267,6 +318,7 @@ const useGamification = () => {
     targetCompanies,
     activities,
     newAchievements,
+    leadStats,
     
     // Computed
     tier,
@@ -286,13 +338,16 @@ const useGamification = () => {
     logNetworkingActivity,
     refreshScores,
     setMonthlyGoals,
+    syncGoalsFromLeads,
+    calculateScoresFromLeads,
     setTargetCompany,
     clearNewAchievements,
     reload: loadGamificationData,
     
     // Constants
     ACTIVITY_POINTS,
-    ACHIEVEMENTS
+    ACHIEVEMENTS,
+    LEAD_POINTS
   };
 };
 

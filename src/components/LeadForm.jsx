@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
+// Helper to format date for input field (YYYY-MM-DD)
+const formatDateForInput = (date) => {
+  if (!date) return '';
+  // Handle Firestore Timestamp or Date object
+  const d = date instanceof Date ? date : 
+            (date.toDate ? date.toDate() : new Date(date));
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString().split('T')[0];
+};
+
 const LeadForm = ({ lead, onSubmit, onCancel }) => {
   const [formData, setFormData] = useState({
     firstName: '',
@@ -20,14 +30,25 @@ const LeadForm = ({ lead, onSubmit, onCancel }) => {
     responseDate: '',
     callScheduled: false,
     callDate: '',
-    ...lead
+    ...lead,
+    // Ensure dates are properly formatted when editing
+    dateContacted: lead ? formatDateForInput(lead.dateContacted) : '',
+    responseDate: lead ? formatDateForInput(lead.responseDate) : '',
+    callDate: lead ? formatDateForInput(lead.callDate || lead.followUpDate) : '',
   });
 
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
     if (lead) {
-      setFormData({ ...formData, ...lead });
+      setFormData(prev => ({ 
+        ...prev, 
+        ...lead,
+        // Format dates properly for input fields
+        dateContacted: formatDateForInput(lead.dateContacted),
+        responseDate: formatDateForInput(lead.responseDate),
+        callDate: formatDateForInput(lead.callDate || lead.followUpDate),
+      }));
     }
   }, [lead]);
 

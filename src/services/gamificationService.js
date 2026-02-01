@@ -108,6 +108,33 @@ export const getActivityHistory = async (userId, days = 30) => {
 };
 
 /**
+ * Get activities from the last 24 hours (for rolling activity score)
+ */
+export const getRecentActivities24h = async (userId) => {
+  const twentyFourHoursAgo = new Date();
+  twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+  
+  try {
+    const q = query(
+      collection(db, COLLECTIONS.ACTIVITIES),
+      where('userId', '==', userId),
+      where('timestamp', '>=', Timestamp.fromDate(twentyFourHoursAgo)),
+      orderBy('timestamp', 'desc')
+    );
+    
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      timestamp: doc.data().timestamp?.toDate?.() || new Date(doc.data().timestamp)
+    }));
+  } catch (error) {
+    console.error('Error getting 24h activities:', error);
+    return [];
+  }
+};
+
+/**
  * Get or create user score document
  */
 export const getUserScore = async (userId) => {
@@ -280,17 +307,19 @@ const calculateWeeksActive = (streakHistory) => {
  */
 export const recalculateUserScore = async (userId, contacts = [], leads = []) => {
   try {
-    // Get activity data for the month
-    const activities = await getActivityHistory(userId, 30);
+    // Get activity data - 30 days for quality/consistency metrics
+    const activitiesMonth = await getActivityHistory(userId, 30);
+    // Get 24-hour activities for rolling activity score
+    const activities24h = await getRecentActivities24h(userId);
     const streakData = await getStreakData(userId);
     
-    // Calculate activity score
-    const activityScore = calculateActivityScore(activities, streakData?.currentStreak || 0);
+    // Calculate activity score from LAST 24 HOURS only (rolling window)
+    const activityScore = calculateActivityScore(activities24h, streakData?.currentStreak || 0);
     
-    // Calculate quality metrics from activities
-    const outreachSent = activities.filter(a => a.type === 'cold_outreach').length;
-    const responses = activities.filter(a => a.type === 'response_received').length;
-    const callsScheduled = activities.filter(a => a.type === 'call_scheduled' || a.type === 'coffee_chat').length;
+    // Calculate quality metrics from monthly activities (for overall quality tracking)
+    const outreachSent = activitiesMonth.filter(a => a.type === 'cold_outreach' || a.type === 'message_sent').length;
+    const responses = activitiesMonth.filter(a => a.type === 'response_received').length;
+    const callsScheduled = activitiesMonth.filter(a => a.type === 'call_scheduled' || a.type === 'coffee_chat').length;
     const strategicContacts = contacts.filter(c => (c.strategicValue || 3) >= 8).length;
     
     const qualityScore = calculateQualityScore({
@@ -332,7 +361,12 @@ export const recalculateUserScore = async (userId, contacts = [], leads = []) =>
         responses,
         callsScheduled,
         responseRate: outreachSent > 0 ? Math.round((responses / outreachSent) * 100) : 0,
-        newContacts: activities.filter(a => a.type === 'contact_added').length
+        newContacts: activitiesMonth.filter(a => a.type === 'contact_added' || a.type === 'lead_added').length
+      },
+      // 24-hour activity stats for quick reference
+      last24hStats: {
+        activitiesCount: activities24h.length,
+        pointsEarned: activities24h.reduce((sum, a) => sum + (a.points || 0), 0)
       },
       streakData: {
         currentStreak: streakData?.currentStreak || 0,
@@ -584,21 +618,18 @@ export const getMonthlyGoals = async (userId, month = null) => {
       return docSnap.data();
     }
     
-    // Default goals
+    // Default goals - only 4 core metrics
     const defaultGoals = {
       userId,
       month: targetMonth,
       goals: {
         coldEmails: { target: 20, current: 0, completed: false },
-        followUps: { target: 10, current: 0, completed: false },
-        calls: { target: 5, current: 0, completed: false },
-        newContacts: { target: 5, current: 0, completed: false },
-        responseRate: { target: 50, current: 0, completed: false },
-        streak: { target: 14, current: 0, completed: false },
-        totalScore: { target: 1500, current: 0, completed: false }
+        followUps: { target: 15, current: 0, completed: false },
+        responses: { target: 10, current: 0, completed: false },
+        calls: { target: 10, current: 0, completed: false }
       },
       goalsCompleted: 0,
-      totalGoals: 7,
+      totalGoals: 4,
       createdAt: serverTimestamp()
     };
     
@@ -662,6 +693,98 @@ export const updateGoalProgress = async (userId, goalKey, current) => {
     }
   } catch (error) {
     console.error('Error updating goal progress:', error);
+  }
+};
+
+/**
+ * Sync monthly goals with actual lead data
+ * Auto-calculates current progress from leads while preserving user-set targets
+ */
+export const syncMonthlyGoalsFromLeads = async (userId, leads = [], customTargets = null) => {
+  const targetMonth = new Date().toISOString().slice(0, 7);
+  const docId = `${userId}_${targetMonth}`;
+  
+  // Filter leads created or updated this month
+  const currentMonthStart = new Date(targetMonth + '-01');
+  const nextMonth = new Date(currentMonthStart);
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  
+  // Helper to check if a date is in current month
+  const isThisMonth = (dateValue) => {
+    if (!dateValue) return false;
+    const date = dateValue?.toDate?.() || new Date(dateValue);
+    return date >= currentMonthStart && date < nextMonth;
+  };
+  
+  // Count activities from leads this month
+  const messagesThisMonth = leads.filter(l => l.reachedOut && isThisMonth(l.dateReachedOut)).length;
+  const responsesThisMonth = leads.filter(l => l.response && isThisMonth(l.responseDate)).length;
+  const callsThisMonth = leads.filter(l => l.callScheduled && isThisMonth(l.callDate)).length;
+  const followUpsThisMonth = leads.filter(l => l.status === 'Follow-up Needed').length;
+  
+  try {
+    const docRef = doc(db, COLLECTIONS.GOALS, docId);
+    const docSnap = await getDoc(docRef);
+    
+    let goalData;
+    if (docSnap.exists()) {
+      goalData = docSnap.data();
+    } else {
+      // Create default goals if not exists
+      goalData = await getMonthlyGoals(userId);
+    }
+    
+    if (goalData && goalData.goals) {
+      // Apply custom targets if provided (from settings)
+      if (customTargets) {
+        if (customTargets.coldEmails !== undefined && goalData.goals.coldEmails) {
+          goalData.goals.coldEmails.target = customTargets.coldEmails;
+        }
+        if (customTargets.followUps !== undefined && goalData.goals.followUps) {
+          goalData.goals.followUps.target = customTargets.followUps;
+        }
+        if (customTargets.responses !== undefined && goalData.goals.responses) {
+          goalData.goals.responses.target = customTargets.responses;
+        }
+        if (customTargets.calls !== undefined && goalData.goals.calls) {
+          goalData.goals.calls.target = customTargets.calls;
+        }
+      }
+      
+      // Update current values from lead data
+      if (goalData.goals.coldEmails) {
+        goalData.goals.coldEmails.current = messagesThisMonth;
+        goalData.goals.coldEmails.completed = messagesThisMonth >= goalData.goals.coldEmails.target;
+      }
+      if (goalData.goals.followUps) {
+        goalData.goals.followUps.current = followUpsThisMonth;
+        goalData.goals.followUps.completed = followUpsThisMonth >= goalData.goals.followUps.target;
+      }
+      if (goalData.goals.responses) {
+        goalData.goals.responses.current = responsesThisMonth;
+        goalData.goals.responses.completed = responsesThisMonth >= goalData.goals.responses.target;
+      }
+      if (goalData.goals.calls) {
+        goalData.goals.calls.current = callsThisMonth;
+        goalData.goals.calls.completed = callsThisMonth >= goalData.goals.calls.target;
+      }
+      
+      // Recalculate goals completed
+      goalData.goalsCompleted = Object.values(goalData.goals).filter(g => g.completed).length;
+      goalData.totalGoals = 4;
+      
+      await setDoc(docRef, {
+        ...goalData,
+        lastSynced: serverTimestamp()
+      }, { merge: true });
+      
+      return goalData;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error syncing monthly goals from leads:', error);
+    return null;
   }
 };
 

@@ -13,6 +13,21 @@ import {
 } from 'lucide-react';
 import { useContacts } from '../contexts/ContactContext';
 import { getNetworkInsights } from '../services/networkInsightsService';
+import PieChart from './PieChart';
+
+// Color palette for charts
+const CHART_COLORS = [
+  '#3b82f6', // blue
+  '#10b981', // green
+  '#f59e0b', // amber
+  '#ef4444', // red
+  '#8b5cf6', // purple
+  '#06b6d4', // cyan
+  '#f97316', // orange
+  '#ec4899', // pink
+];
+
+const getColor = (index) => CHART_COLORS[index % CHART_COLORS.length];
 
 const NetworkInsights = ({ onContactClick }) => {
   const { contacts } = useContacts();
@@ -107,51 +122,16 @@ const NetworkInsights = ({ onContactClick }) => {
           
           {/* Relationships Tab */}
           {activeTab === 'relationships' && (
-            <div className="space-y-2">
-              {insights.relationshipBreakdown.slice(0, 7).map((item, idx) => (
-                <div key={item.type} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div 
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: getColor(idx) }}
-                    />
-                    <span className="text-sm text-gray-700">{item.label}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-gray-900">{item.count}</span>
-                    <span className="text-xs text-gray-500">({item.percentage}%)</span>
-                  </div>
-                </div>
-              ))}
-              
-              {/* Bar Chart */}
-              <div className="mt-4 space-y-2">
-                {insights.relationshipBreakdown.slice(0, 5).map((item, idx) => (
-                  <div key={item.type} className="flex items-center gap-2">
-                    <div className="w-24 text-xs text-gray-600 truncate">{item.label}</div>
-                    <div className="flex-1 bg-gray-100 rounded-full h-2">
-                      <div 
-                        className="h-2 rounded-full transition-all"
-                        style={{ 
-                          width: `${item.percentage}%`,
-                          backgroundColor: getColor(idx)
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
-          {/* Sectors Tab */}
-          {activeTab === 'sectors' && (
-            <div className="space-y-2">
-              {insights.sectorBreakdown.slice(0, 8).map((item, idx) => (
-                <div key={item.sector}>
-                  <div className="flex items-center justify-between">
+            <div className="space-y-4">
+              {/* List */}
+              <div className="space-y-2">
+                {insights.relationshipBreakdown.slice(0, 7).map((item, idx) => (
+                  <div key={item.type} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Briefcase size={14} className="text-gray-400" />
+                      <div 
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: getColor(idx) }}
+                      />
                       <span className="text-sm text-gray-700">{item.label}</span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -159,20 +139,75 @@ const NetworkInsights = ({ onContactClick }) => {
                       <span className="text-xs text-gray-500">({item.percentage}%)</span>
                     </div>
                   </div>
-                  
-                  {/* Sub-categories for Finance */}
-                  {item.subCategories && (
-                    <div className="ml-6 mt-1 space-y-1">
-                      {item.subCategories.map(sub => (
-                        <div key={sub.sector} className="flex items-center justify-between text-xs text-gray-500">
-                          <span>• {sub.label}</span>
-                          <span>{sub.count}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                ))}
+              </div>
+              
+              {/* Pie Chart at bottom */}
+              {insights.relationshipBreakdown.length > 0 && (
+                <div className="flex justify-center bg-gray-50 rounded-xl p-4">
+                  <PieChart 
+                    data={insights.relationshipBreakdown.slice(0, 7).map((item, idx) => ({
+                      label: item.label,
+                      value: item.count,
+                      color: getColor(idx)
+                    }))}
+                    size={150}
+                  />
                 </div>
-              ))}
+              )}
+            </div>
+          )}
+          
+          {/* Sectors Tab */}
+          {activeTab === 'sectors' && (
+            <div className="space-y-4">
+              {/* List */}
+              <div className="space-y-2">
+                {insights.sectorBreakdown.slice(0, 8).map((item, idx) => (
+                  <div key={item.sector}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: getColor(idx) }}
+                        />
+                        <Briefcase size={14} className="text-gray-400" />
+                        <span className="text-sm text-gray-700">{item.label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900">{item.count}</span>
+                        <span className="text-xs text-gray-500">({item.percentage}%)</span>
+                      </div>
+                    </div>
+                    
+                    {/* Sub-categories for Finance */}
+                    {item.subCategories && (
+                      <div className="ml-6 mt-1 space-y-1">
+                        {item.subCategories.map(sub => (
+                          <div key={sub.sector} className="flex items-center justify-between text-xs text-gray-500">
+                            <span>• {sub.label}</span>
+                            <span>{sub.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Pie Chart at bottom */}
+              {insights.sectorBreakdown.length > 0 && (
+                <div className="flex justify-center bg-gray-50 rounded-xl p-4">
+                  <PieChart 
+                    data={insights.sectorBreakdown.slice(0, 8).map((item, idx) => ({
+                      label: item.label,
+                      value: item.count,
+                      color: getColor(idx)
+                    }))}
+                    size={150}
+                  />
+                </div>
+              )}
             </div>
           )}
           
@@ -220,21 +255,6 @@ const NetworkInsights = ({ onContactClick }) => {
       )}
     </div>
   );
-};
-
-// Color palette for charts
-const getColor = (index) => {
-  const colors = [
-    '#3b82f6', // blue
-    '#10b981', // green
-    '#f59e0b', // amber
-    '#ef4444', // red
-    '#8b5cf6', // purple
-    '#06b6d4', // cyan
-    '#f97316', // orange
-    '#ec4899', // pink
-  ];
-  return colors[index % colors.length];
 };
 
 export default NetworkInsights;
