@@ -403,61 +403,59 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
     `;
     
     return (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden h-full">
+      <div className="bg-white rounded-xl overflow-hidden h-full flex">
         <style>{inlineCalendarStyles}</style>
         
-        <div className="flex h-full">
-          {/* Left: Streak Info */}
-          <div className={`w-1/3 p-4 flex flex-col justify-center ${
-            currentStreak > 0 
-              ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white' 
-              : 'bg-gray-100 text-gray-700'
-          }`}>
-            <div className="flex items-center gap-2 mb-2">
-              {currentStreak > 0 ? (
-                <Flame className="text-yellow-300" size={24} />
-              ) : (
-                <Snowflake className="text-gray-400" size={24} />
-              )}
-            </div>
-            <p className="text-3xl font-bold">{currentStreak}</p>
-            <p className={`text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>
-              weekday streak
-            </p>
-            {currentMultiplier > 1 && (
-              <div className="mt-2 bg-white/20 rounded px-2 py-1 text-xs inline-block">
-                {currentMultiplier}x bonus
-              </div>
+        {/* Left: Streak Info with orange border */}
+        <div className={`w-1/3 p-4 flex flex-col justify-center border-2 border-orange-400 rounded-l-xl ${
+          currentStreak > 0 
+            ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white' 
+            : 'bg-gray-100 text-gray-700'
+        }`}>
+          <div className="flex items-center gap-2 mb-2">
+            {currentStreak > 0 ? (
+              <Flame className="text-yellow-300" size={24} />
+            ) : (
+              <Snowflake className="text-gray-400" size={24} />
             )}
-            <div className="mt-3 pt-3 border-t border-white/20">
-              <p className={`text-lg font-bold ${currentStreak > 0 ? 'text-white' : 'text-gray-900'}`}>{longestStreak}</p>
-              <p className={`text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>longest</p>
+          </div>
+          <p className="text-3xl font-bold">{currentStreak}</p>
+          <p className={`text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>
+            weekday streak
+          </p>
+          {currentMultiplier > 1 && (
+            <div className="mt-2 bg-white/20 rounded px-2 py-1 text-xs inline-block">
+              {currentMultiplier}x bonus
+            </div>
+          )}
+          <div className="mt-3 pt-3 border-t border-white/20">
+            <p className={`text-lg font-bold ${currentStreak > 0 ? 'text-white' : 'text-gray-900'}`}>{longestStreak}</p>
+            <p className={`text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>longest</p>
+          </div>
+        </div>
+        
+        {/* Right: Compact Calendar with white border */}
+        <div className="flex-1 p-3 flex flex-col inline-calendar border-2 border-gray-200 border-l-0 rounded-r-xl">
+          <div className="mb-1 flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+              <span className="text-gray-500">Weekday</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-orange-300"></div>
+              <span className="text-gray-500">Weekend</span>
             </div>
           </div>
           
-          {/* Right: Compact Calendar */}
-          <div className="flex-1 p-3 flex flex-col inline-calendar">
-            <div className="mb-1 flex items-center gap-2 text-xs">
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                <span className="text-gray-500">Weekday</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-orange-300"></div>
-                <span className="text-gray-500">Weekend</span>
-              </div>
-            </div>
-            
-            <div className="flex-1">
-              <ReactCalendar
-                tileContent={tileContent}
-                tileClassName={tileClassName}
-                maxDate={new Date()}
-                showNeighboringMonth={false}
-                prev2Label={null}
-                next2Label={null}
-              />
-            </div>
+          <div className="flex-1">
+            <ReactCalendar
+              tileContent={tileContent}
+              tileClassName={tileClassName}
+              maxDate={new Date()}
+              showNeighboringMonth={false}
+              prev2Label={null}
+              next2Label={null}
+            />
           </div>
         </div>
       </div>
