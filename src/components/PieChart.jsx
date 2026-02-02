@@ -15,7 +15,7 @@ const COLORS = [
   '#A855F7', // violet
 ];
 
-const PieChart = ({ data, title, size = 200 }) => {
+const PieChart = ({ data, title, size = 200, showLegend = true }) => {
   const [hoveredSlice, setHoveredSlice] = useState(null);
   
   // Filter out zero values and calculate total
@@ -146,29 +146,31 @@ const PieChart = ({ data, title, size = 200 }) => {
       </div>
       
       {/* Legend */}
-      <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs max-w-full">
-        {slices.map((slice, index) => (
-          <div 
-            key={index} 
-            className={`flex items-center gap-2 cursor-pointer transition-opacity ${
-              hoveredSlice !== null && hoveredSlice !== index ? 'opacity-50' : ''
-            }`}
-            onMouseEnter={() => setHoveredSlice(index)}
-            onMouseLeave={() => setHoveredSlice(null)}
-          >
+      {showLegend && (
+        <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs max-w-full">
+          {slices.map((slice, index) => (
             <div 
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: slice.color }}
-            />
-            <span className="text-gray-700 truncate" title={slice.label}>
-              {slice.label}
-            </span>
-            <span className="text-gray-500 ml-auto font-medium">
-              {slice.value}
-            </span>
-          </div>
-        ))}
-      </div>
+              key={index} 
+              className={`flex items-center gap-2 cursor-pointer transition-opacity ${
+                hoveredSlice !== null && hoveredSlice !== index ? 'opacity-50' : ''
+              }`}
+              onMouseEnter={() => setHoveredSlice(index)}
+              onMouseLeave={() => setHoveredSlice(null)}
+            >
+              <div 
+                className="w-3 h-3 rounded-full flex-shrink-0"
+                style={{ backgroundColor: slice.color }}
+              />
+              <span className="text-gray-700 truncate" title={slice.label}>
+                {slice.label}
+              </span>
+              <span className="text-gray-500 ml-auto font-medium">
+                {slice.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Trophy, Lock, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Trophy, Lock, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
 import useGamification from '../hooks/useGamification';
 import { ACHIEVEMENT_CATEGORIES } from '../services/achievementService';
 
@@ -13,6 +13,7 @@ const AchievementsList = ({ compact = false }) => {
     loading 
   } = useGamification();
 
+  const [showAllAchievements, setShowAllAchievements] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showLocked, setShowLocked] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,43 +77,146 @@ const AchievementsList = ({ compact = false }) => {
 
   if (compact) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Trophy className="text-yellow-500" size={20} />
-            <h3 className="font-semibold text-gray-900">Achievements</h3>
+      <>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Trophy className="text-yellow-500" size={20} />
+              <h3 className="font-semibold text-gray-900">Achievements</h3>
+            </div>
+            <span className="text-sm text-gray-500">
+              {stats.unlocked}/{stats.total}
+            </span>
           </div>
-          <span className="text-sm text-gray-500">
-            {stats.unlocked}/{stats.total}
-          </span>
+          
+          {/* Progress bar */}
+          <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-4">
+            <div 
+              className="h-full bg-gradient-to-r from-yellow-400 to-orange-400 transition-all"
+              style={{ width: `${(stats.unlocked / stats.total) * 100}%` }}
+            />
+          </div>
+
+          {/* Recent achievements */}
+          <div className="flex flex-wrap gap-2 mb-3">
+            {unlockedAchievementsList.slice(0, 6).map(achievement => (
+              <div 
+                key={achievement.id}
+                className="text-2xl hover:scale-110 transition-transform cursor-pointer"
+                title={`${achievement.name}: ${achievement.description}`}
+              >
+                {achievement.icon}
+              </div>
+            ))}
+            {stats.unlocked > 6 && (
+              <span className="text-sm text-gray-400 self-center">
+                +{stats.unlocked - 6} more
+              </span>
+            )}
+          </div>
+          
+          {/* See all achievements link */}
+          <button
+            onClick={() => setShowAllAchievements(true)}
+            className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
+          >
+            See all achievements →
+          </button>
         </div>
         
-        {/* Progress bar */}
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden mb-4">
-          <div 
-            className="h-full bg-gradient-to-r from-yellow-400 to-orange-400 transition-all"
-            style={{ width: `${(stats.unlocked / stats.total) * 100}%` }}
-          />
-        </div>
-
-        {/* Recent achievements */}
-        <div className="flex flex-wrap gap-2">
-          {unlockedAchievementsList.slice(0, 6).map(achievement => (
-            <div 
-              key={achievement.id}
-              className="text-2xl hover:scale-110 transition-transform cursor-pointer"
-              title={`${achievement.name}: ${achievement.description}`}
-            >
-              {achievement.icon}
+        {/* All Achievements Modal */}
+        {showAllAchievements && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowAllAchievements(false)}>
+            <div className="bg-white rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden shadow-xl" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="sticky top-0 bg-gradient-to-r from-yellow-500 to-orange-500 text-white px-6 py-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Trophy size={24} />
+                  <div>
+                    <h2 className="text-lg font-bold">All Achievements</h2>
+                    <p className="text-sm text-yellow-100">{stats.unlocked} of {stats.total} unlocked • {stats.earnedPoints} pts earned</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowAllAchievements(false)} className="p-2 hover:bg-white/20 rounded-lg transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              {/* Achievements Grid */}
+              <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {allAchievements
+                    .sort((a, b) => {
+                      const aUnlocked = unlockedIds.has(a.id);
+                      const bUnlocked = unlockedIds.has(b.id);
+                      if (aUnlocked && !bUnlocked) return -1;
+                      if (!aUnlocked && bUnlocked) return 1;
+                      return b.points - a.points;
+                    })
+                    .map(achievement => {
+                      const isUnlocked = unlockedIds.has(achievement.id);
+                      const progress = achievementProgress[achievement.id];
+                      
+                      return (
+                        <div
+                          key={achievement.id}
+                          className={`rounded-lg border p-3 ${
+                            isUnlocked
+                              ? 'bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200'
+                              : 'bg-gray-50 border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`text-2xl ${!isUnlocked && 'grayscale opacity-40'}`}>
+                              {isUnlocked ? achievement.icon : <Lock className="text-gray-400" size={24} />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h4 className={`font-semibold text-sm ${isUnlocked ? 'text-gray-900' : 'text-gray-500'}`}>
+                                  {achievement.name}
+                                </h4>
+                                {isUnlocked && (
+                                  <span className="text-green-500 text-xs">✓</span>
+                                )}
+                              </div>
+                              <p className={`text-xs mt-0.5 ${isUnlocked ? 'text-gray-600' : 'text-gray-400'}`}>
+                                {achievement.description}
+                              </p>
+                              <div className="flex items-center justify-between mt-2">
+                                <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                  isUnlocked 
+                                    ? 'bg-yellow-200 text-yellow-800' 
+                                    : 'bg-gray-200 text-gray-600'
+                                }`}>
+                                  +{achievement.points} pts
+                                </span>
+                                {!isUnlocked && progress && (
+                                  <span className="text-xs text-gray-500">
+                                    {progress.current}/{progress.target}
+                                  </span>
+                                )}
+                              </div>
+                              {!isUnlocked && progress && (
+                                <div className="h-1 bg-gray-200 rounded-full mt-2 overflow-hidden">
+                                  <div 
+                                    className="h-full bg-yellow-400 transition-all"
+                                    style={{ width: `${progress.percentage}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
             </div>
-          ))}
-          {stats.unlocked > 6 && (
-            <span className="text-sm text-gray-400 self-center">
-              +{stats.unlocked - 6} more
-            </span>
-          )}
-        </div>
-      </div>
+          </div>
+        )}
+      </>
+    );
+  }
     );
   }
 

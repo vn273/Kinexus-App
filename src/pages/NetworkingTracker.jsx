@@ -50,7 +50,8 @@ const NetworkingTracker = () => {
     logNetworkingActivity,
     refreshScores,
     syncGoalsFromLeads,
-    loading: gamificationLoading 
+    loading: gamificationLoading,
+    scoresSyncedFromLeads
   } = useGamification();
   
   const [leads, setLeads] = useState([]);
@@ -1149,7 +1150,9 @@ const NetworkingTracker = () => {
                   <Trophy size={16} className="text-yellow-400" />
                   <span className="text-sm text-slate-300">Total Score</span>
                 </div>
-                <div className="text-2xl font-bold">{(score?.totalScore || 0).toLocaleString()}</div>
+                <div className="text-2xl font-bold">
+                  {scoresSyncedFromLeads ? (score?.totalScore || 0).toLocaleString() : '—'}
+                </div>
                 <div className="text-xs text-slate-400">{tier?.icon} {tier?.name}</div>
               </div>
               
@@ -1203,7 +1206,7 @@ const NetworkingTracker = () => {
             {/* Goals & Streak Expanded */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <GoalSetting compact />
-              <StreakTracker compact />
+              <StreakTracker compact variant="inline" />
             </div>
           </div>
         )}
@@ -1371,7 +1374,9 @@ const NetworkingTracker = () => {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full">
                 <Trophy size={16} className="text-yellow-400" />
-                <span className="text-white font-medium">{(score?.totalScore || 0).toLocaleString()} pts</span>
+                <span className="text-white font-medium">
+                  {scoresSyncedFromLeads ? `${(score?.totalScore || 0).toLocaleString()} pts` : '— pts'}
+                </span>
               </div>
               
               {streak?.currentStreak > 0 && (

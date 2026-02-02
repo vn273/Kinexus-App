@@ -152,6 +152,7 @@ const NetworkInsights = ({ onContactClick }) => {
                       color: getColor(idx)
                     }))}
                     size={150}
+                    showLegend={false}
                   />
                 </div>
               )}
@@ -205,6 +206,7 @@ const NetworkInsights = ({ onContactClick }) => {
                       color: getColor(idx)
                     }))}
                     size={150}
+                    showLegend={false}
                   />
                 </div>
               )}

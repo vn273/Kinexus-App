@@ -61,6 +61,7 @@ const useGamification = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [newAchievements, setNewAchievements] = useState([]);
+  const [scoresSyncedFromLeads, setScoresSyncedFromLeads] = useState(false);
 
   // Load all gamification data
   const loadGamificationData = useCallback(async () => {
@@ -268,6 +269,9 @@ const useGamification = () => {
         activityHighScore: newHighScore
       }));
       
+      // Mark that scores have been synced from leads (prevents Firebase cache flickering)
+      setScoresSyncedFromLeads(true);
+      
       // Sync goals with lead data
       const updatedGoals = await syncMonthlyGoalsFromLeads(currentUser.uid, leads, customTargets);
       if (updatedGoals) {
@@ -315,6 +319,9 @@ const useGamification = () => {
       activityScore: todayScore,
       activityHighScore: newHighScore
     }));
+    
+    // Mark that scores have been synced from leads
+    setScoresSyncedFromLeads(true);
     
     return stats;
   }, [currentUser]);
@@ -415,6 +422,7 @@ const useGamification = () => {
     // State
     loading,
     error,
+    scoresSyncedFromLeads,
     
     // Actions
     logNetworkingActivity,

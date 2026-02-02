@@ -4,8 +4,9 @@ import ReactCalendar from 'react-calendar';
 import useGamification from '../hooks/useGamification';
 import 'react-calendar/dist/Calendar.css';
 
-const StreakTracker = ({ compact = false }) => {
+const StreakTracker = ({ compact = false, variant = 'popup' }) => {
   const { streak, currentMultiplier, loading, leadStats } = useGamification();
+  const [showCalendar, setShowCalendar] = useState(false);
 
   const currentStreak = streak?.currentStreak || 0;
   const longestStreak = streak?.longestStreak || 0;
@@ -144,6 +145,80 @@ const StreakTracker = ({ compact = false }) => {
       color: white !important;
     }
   `;
+  
+  // Popup-style calendar modal styles with dark text for navigation
+  const popupCalendarStyles = `
+    .popup-calendar .react-calendar {
+      width: 100%;
+      border: none;
+      font-family: inherit;
+      background: white;
+    }
+    .popup-calendar .react-calendar__navigation {
+      margin-bottom: 0.5em;
+    }
+    .popup-calendar .react-calendar__navigation button {
+      min-width: 36px;
+      background: none;
+      font-size: 14px;
+      color: #374151;
+    }
+    .popup-calendar .react-calendar__navigation button:hover {
+      background: #f3f4f6;
+      border-radius: 4px;
+    }
+    .popup-calendar .react-calendar__navigation button:disabled {
+      background: none;
+      color: #9ca3af;
+    }
+    .popup-calendar .react-calendar__month-view__weekdays {
+      font-size: 11px;
+      font-weight: 600;
+      color: #6b7280;
+    }
+    .popup-calendar .react-calendar__month-view__weekdays__weekday {
+      padding: 0.5em;
+    }
+    .popup-calendar .react-calendar__month-view__weekdays__weekday abbr {
+      text-decoration: none;
+    }
+    .popup-calendar .react-calendar__tile {
+      padding: 0.6em 0.5em;
+      font-size: 13px;
+      border-radius: 4px;
+      color: #374151;
+    }
+    .popup-calendar .react-calendar__tile:hover {
+      background: #f3f4f6;
+    }
+    .popup-calendar .react-calendar__tile.activity-day {
+      background: #fed7aa !important;
+      color: #c2410c;
+      font-weight: 600;
+    }
+    .popup-calendar .react-calendar__tile.activity-day:hover {
+      background: #fdba74 !important;
+    }
+    .popup-calendar .react-calendar__tile.activity-day-weekend {
+      background: #fef3c7 !important;
+      color: #d97706;
+      font-weight: 500;
+    }
+    .popup-calendar .react-calendar__tile.activity-day-weekend:hover {
+      background: #fde68a !important;
+    }
+    .popup-calendar .react-calendar__tile.weekend-day {
+      color: #9ca3af;
+    }
+    .popup-calendar .react-calendar__tile--now {
+      background: #dbeafe !important;
+      color: #1d4ed8;
+    }
+    .popup-calendar .react-calendar__tile--active {
+      background: #3b82f6 !important;
+      color: white !important;
+    }
+  `;
 
   if (loading) {
     return (
@@ -154,18 +229,18 @@ const StreakTracker = ({ compact = false }) => {
     );
   }
 
-  // Compact version with inline calendar
-  if (compact) {
+  // Compact version - popup variant (for Dashboard)
+  if (compact && variant === 'popup') {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <style>{calendarStyles}</style>
-        
-        {/* Header with streak info */}
-        <div className={`p-4 ${
-          currentStreak > 0 
-            ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white' 
-            : 'bg-gray-100 text-gray-700'
-        }`}>
+      <>
+        <div 
+          className={`rounded-xl p-4 cursor-pointer hover:opacity-95 transition-opacity ${
+            currentStreak > 0 
+              ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white' 
+              : 'bg-gray-100 text-gray-700 border border-gray-200'
+          }`}
+          onClick={() => setShowCalendar(true)}
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {currentStreak > 0 ? (
@@ -174,7 +249,7 @@ const StreakTracker = ({ compact = false }) => {
                 <Snowflake className="text-gray-400" size={28} />
               )}
               <div>
-                <p className="text-2xl font-bold">{currentStreak}</p>
+                <p className="text-3xl font-bold">{currentStreak}</p>
                 <p className={`text-sm ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>
                   weekday streak
                 </p>
@@ -186,41 +261,281 @@ const StreakTracker = ({ compact = false }) => {
               </div>
             )}
           </div>
+          <p className={`mt-2 text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-400'}`}>
+            Click to view calendar
+          </p>
           {isAtRisk && (
-            <p className="mt-2 text-sm text-yellow-200 animate-pulse">
-              ⚠️ Don't lose your streak! Log activity today.
+            <p className="mt-1 text-sm text-yellow-200 animate-pulse">
+              ⚠️ Don't lose your streak!
             </p>
           )}
         </div>
 
-        {/* Inline Calendar */}
-        <div className="p-3">
-          <div className="mb-2 flex items-center gap-3 text-xs">
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-              <span className="text-gray-600">Weekday</span>
+        {/* Calendar Popup Modal */}
+        {showCalendar && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCalendar(false)}>
+            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl popup-calendar" onClick={e => e.stopPropagation()}>
+              <style>{popupCalendarStyles}</style>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Flame className="text-orange-500" size={20} />
+                  Activity Calendar
+                </h3>
+                <button onClick={() => setShowCalendar(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="mb-4 flex items-center gap-4 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-orange-500"></div>
+                  <span className="text-gray-600">Weekday activity</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-orange-300"></div>
+                  <span className="text-gray-600">Weekend activity</span>
+                </div>
+              </div>
+
+              <ReactCalendar
+                tileContent={tileContent}
+                tileClassName={tileClassName}
+                maxDate={new Date()}
+                showNeighboringMonth={false}
+              />
+
+              <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-2 gap-4 text-center">
+                <div>
+                  <p className="text-2xl font-bold text-orange-600">{currentStreak}</p>
+                  <p className="text-xs text-gray-500">Current Streak</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-700">{longestStreak}</p>
+                  <p className="text-xs text-gray-500">Longest Streak</p>
+                </div>
+              </div>
+              
+              <p className="mt-3 text-xs text-gray-400 text-center">
+                Streak counts consecutive weekdays only (Mon-Fri)
+              </p>
             </div>
-            <div className="flex items-center gap-1">
-              <div className="w-2 h-2 rounded-full bg-orange-300"></div>
-              <span className="text-gray-600">Weekend</span>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // Compact version - inline variant (for NetworkingTracker)
+  if (compact && variant === 'inline') {
+    // Inline calendar styles with dark text for navigation  
+    const inlineCalendarStyles = `
+      .inline-calendar .react-calendar {
+        width: 100%;
+        border: none;
+        font-family: inherit;
+        background: transparent;
+      }
+      .inline-calendar .react-calendar__navigation {
+        margin-bottom: 0.25em;
+      }
+      .inline-calendar .react-calendar__navigation button {
+        min-width: 28px;
+        background: none;
+        font-size: 12px;
+        color: #374151;
+        padding: 4px;
+      }
+      .inline-calendar .react-calendar__navigation button:hover {
+        background: #f3f4f6;
+        border-radius: 4px;
+      }
+      .inline-calendar .react-calendar__navigation button:disabled {
+        background: none;
+        color: #9ca3af;
+      }
+      .inline-calendar .react-calendar__month-view__weekdays {
+        font-size: 9px;
+        font-weight: 600;
+        color: #6b7280;
+      }
+      .inline-calendar .react-calendar__month-view__weekdays__weekday {
+        padding: 0.2em;
+      }
+      .inline-calendar .react-calendar__month-view__weekdays__weekday abbr {
+        text-decoration: none;
+      }
+      .inline-calendar .react-calendar__tile {
+        padding: 0.25em 0.15em;
+        font-size: 10px;
+        border-radius: 3px;
+        color: #374151;
+      }
+      .inline-calendar .react-calendar__tile:hover {
+        background: #f3f4f6;
+      }
+      .inline-calendar .react-calendar__tile.activity-day {
+        background: #fed7aa !important;
+        color: #c2410c;
+        font-weight: 600;
+      }
+      .inline-calendar .react-calendar__tile.activity-day:hover {
+        background: #fdba74 !important;
+      }
+      .inline-calendar .react-calendar__tile.activity-day-weekend {
+        background: #fef3c7 !important;
+        color: #d97706;
+        font-weight: 500;
+      }
+      .inline-calendar .react-calendar__tile.activity-day-weekend:hover {
+        background: #fde68a !important;
+      }
+      .inline-calendar .react-calendar__tile.weekend-day {
+        color: #9ca3af;
+      }
+      .inline-calendar .react-calendar__tile--now {
+        background: #dbeafe !important;
+        color: #1d4ed8;
+      }
+      .inline-calendar .react-calendar__tile--active {
+        background: #3b82f6 !important;
+        color: white !important;
+      }
+    `;
+    
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden h-full">
+        <style>{inlineCalendarStyles}</style>
+        
+        <div className="flex h-full">
+          {/* Left: Streak Info */}
+          <div className={`w-1/3 p-4 flex flex-col justify-center ${
+            currentStreak > 0 
+              ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white' 
+              : 'bg-gray-100 text-gray-700'
+          }`}>
+            <div className="flex items-center gap-2 mb-2">
+              {currentStreak > 0 ? (
+                <Flame className="text-yellow-300" size={24} />
+              ) : (
+                <Snowflake className="text-gray-400" size={24} />
+              )}
+            </div>
+            <p className="text-3xl font-bold">{currentStreak}</p>
+            <p className={`text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>
+              weekday streak
+            </p>
+            {currentMultiplier > 1 && (
+              <div className="mt-2 bg-white/20 rounded px-2 py-1 text-xs inline-block">
+                {currentMultiplier}x bonus
+              </div>
+            )}
+            <div className="mt-3 pt-3 border-t border-white/20">
+              <p className={`text-lg font-bold ${currentStreak > 0 ? 'text-white' : 'text-gray-900'}`}>{longestStreak}</p>
+              <p className={`text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>longest</p>
             </div>
           </div>
           
-          <ReactCalendar
-            tileContent={tileContent}
-            tileClassName={tileClassName}
-            maxDate={new Date()}
-            showNeighboringMonth={false}
-            prev2Label={null}
-            next2Label={null}
-          />
-          
-          <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between text-xs text-gray-500">
-            <span>Longest: {longestStreak} days</span>
-            <span>{activityDates.length} activity days</span>
+          {/* Right: Compact Calendar */}
+          <div className="flex-1 p-3 flex flex-col inline-calendar">
+            <div className="mb-1 flex items-center gap-2 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                <span className="text-gray-500">Weekday</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-orange-300"></div>
+                <span className="text-gray-500">Weekend</span>
+              </div>
+            </div>
+            
+            <div className="flex-1">
+              <ReactCalendar
+                tileContent={tileContent}
+                tileClassName={tileClassName}
+                maxDate={new Date()}
+                showNeighboringMonth={false}
+                prev2Label={null}
+                next2Label={null}
+              />
+            </div>
           </div>
         </div>
       </div>
+    );
+  }
+
+  // Default compact (legacy - fallback to popup)
+  if (compact) {
+    return (
+      <>
+        <div 
+          className={`rounded-xl p-4 cursor-pointer hover:opacity-95 transition-opacity ${
+            currentStreak > 0 
+              ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white' 
+              : 'bg-gray-100 text-gray-700 border border-gray-200'
+          }`}
+          onClick={() => setShowCalendar(true)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {currentStreak > 0 ? (
+                <Flame className="text-yellow-300" size={28} />
+              ) : (
+                <Snowflake className="text-gray-400" size={28} />
+              )}
+              <div>
+                <p className="text-3xl font-bold">{currentStreak}</p>
+                <p className={`text-sm ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>
+                  weekday streak
+                </p>
+              </div>
+            </div>
+            {currentMultiplier > 1 && (
+              <div className="bg-white/20 rounded-lg px-3 py-1">
+                <span className="font-bold">{currentMultiplier}x</span>
+              </div>
+            )}
+          </div>
+          <p className={`mt-2 text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-400'}`}>
+            Click to view calendar
+          </p>
+        </div>
+
+        {/* Calendar Popup Modal */}
+        {showCalendar && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCalendar(false)}>
+            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl popup-calendar" onClick={e => e.stopPropagation()}>
+              <style>{popupCalendarStyles}</style>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Flame className="text-orange-500" size={20} />
+                  Activity Calendar
+                </h3>
+                <button onClick={() => setShowCalendar(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <ReactCalendar
+                tileContent={tileContent}
+                tileClassName={tileClassName}
+                maxDate={new Date()}
+              />
+
+              <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-2 gap-4 text-center">
+                <div>
+                  <p className="text-2xl font-bold text-orange-600">{currentStreak}</p>
+                  <p className="text-xs text-gray-500">Current Streak</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-gray-700">{longestStreak}</p>
+                  <p className="text-xs text-gray-500">Longest Streak</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
