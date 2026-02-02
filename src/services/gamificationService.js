@@ -699,6 +699,7 @@ export const updateGoalProgress = async (userId, goalKey, current) => {
 /**
  * Sync monthly goals with actual lead data
  * Auto-calculates current progress from leads while preserving user-set targets
+ * Returns data in format expected by GoalSetting component: { targets: {}, progress: {} }
  */
 export const syncMonthlyGoalsFromLeads = async (userId, leads = [], customTargets = null) => {
   const targetMonth = new Date().toISOString().slice(0, 7);
@@ -720,7 +721,18 @@ export const syncMonthlyGoalsFromLeads = async (userId, leads = [], customTarget
   const messagesThisMonth = leads.filter(l => l.reachedOut && isThisMonth(l.dateReachedOut)).length;
   const responsesThisMonth = leads.filter(l => l.response && isThisMonth(l.responseDate)).length;
   const callsThisMonth = leads.filter(l => l.callScheduled && isThisMonth(l.callDate)).length;
-  const followUpsThisMonth = leads.filter(l => l.status === 'Follow-up Needed').length;
+  // Follow-ups that need action this month (leads with Follow-up Needed status that were contacted this month)
+  const followUpsThisMonth = leads.filter(l => {
+    const status = l.status || '';
+    if (status === 'Follow-up Needed') return true;
+    // Also count if reachedOut but no response within 7+ days
+    if (l.reachedOut && !l.response && isThisMonth(l.dateReachedOut)) {
+      const contactDate = l.dateReachedOut?.toDate?.() || new Date(l.dateReachedOut);
+      const daysSince = Math.floor((new Date() - contactDate) / (1000 * 60 * 60 * 24));
+      return daysSince > 7;
+    }
+    return false;
+  }).length;
   
   try {
     const docRef = doc(db, COLLECTIONS.GOALS, docId);
@@ -778,7 +790,23 @@ export const syncMonthlyGoalsFromLeads = async (userId, leads = [], customTarget
         lastSynced: serverTimestamp()
       }, { merge: true });
       
-      return goalData;
+      // Return in format expected by GoalSetting component
+      return {
+        targets: {
+          coldEmails: goalData.goals.coldEmails?.target || 20,
+          followUps: goalData.goals.followUps?.target || 15,
+          responses: goalData.goals.responses?.target || 10,
+          calls: goalData.goals.calls?.target || 10
+        },
+        progress: {
+          coldEmails: messagesThisMonth,
+          followUps: followUpsThisMonth,
+          responses: responsesThisMonth,
+          calls: callsThisMonth
+        },
+        goalsCompleted: goalData.goalsCompleted,
+        totalGoals: 4
+      };
     }
     
     return null;

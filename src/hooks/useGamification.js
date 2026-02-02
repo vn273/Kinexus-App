@@ -26,7 +26,13 @@ import {
   calculateLeadStats,
   getAllLeadStats,
   LEAD_POINTS,
-  getTodayKey
+  getTodayKey,
+  storeActivityScoreForDay,
+  getHighScoreFrom7DayHistory,
+  updateHighScoreFromHistory,
+  calculateWeekdayStreak,
+  calculateLongestStreak,
+  getActivityDatesFromLeads
 } from '../services/leadStatsService';
 import {
   ACHIEVEMENTS,
@@ -212,17 +218,30 @@ const useGamification = () => {
       const stats = getAllLeadStats(leads);
       setLeadStats(stats);
       
-      // Check and update activity high score
+      // Store today's activity score in 7-day history
       const todayScore = stats.today.totalPoints;
-      const storedHighScore = parseInt(localStorage.getItem(`activityHighScore_${currentUser.uid}`) || '0', 10);
-      const newHighScore = Math.max(todayScore, storedHighScore);
+      storeActivityScoreForDay(currentUser.uid, getTodayKey(), todayScore);
       
-      if (todayScore > storedHighScore) {
-        localStorage.setItem(`activityHighScore_${currentUser.uid}`, String(todayScore));
-        localStorage.setItem(`activityHighScoreDate_${currentUser.uid}`, getTodayKey());
-      }
+      // Get high score from 7-day rolling history
+      const newHighScore = updateHighScoreFromHistory(
+        currentUser.uid, 
+        parseInt(localStorage.getItem(`activityHighScore_${currentUser.uid}`) || '0', 10)
+      );
       
-      // Update score based on lead stats
+      // Calculate weekday streak from lead dates
+      const currentStreak = calculateWeekdayStreak(leads);
+      const longestStreak = calculateLongestStreak(leads);
+      const activityDates = getActivityDatesFromLeads(leads);
+      
+      // Update streak state
+      setStreak({
+        currentStreak,
+        longestStreak,
+        lastActivityDate: activityDates.length > 0 ? activityDates[activityDates.length - 1] : null,
+        activityDates // Store all activity dates for calendar
+      });
+      
+      // Update score based on lead stats (simple summation)
       setScore(prev => ({
         ...prev,
         totalScore: stats.allTime.totalPoints,
@@ -235,7 +254,7 @@ const useGamification = () => {
       if (updatedGoals) {
         setGoals(updatedGoals);
       }
-      return { goals: updatedGoals, stats };
+      return { goals: updatedGoals, stats, streak: { currentStreak, longestStreak } };
     } catch (err) {
       console.error('Error syncing goals from leads:', err);
       throw err;
@@ -250,13 +269,25 @@ const useGamification = () => {
     // Check high score (using a general key for non-logged-in users)
     const userId = currentUser?.uid || 'guest';
     const todayScore = stats.today.totalPoints;
-    const storedHighScore = parseInt(localStorage.getItem(`activityHighScore_${userId}`) || '0', 10);
-    const newHighScore = Math.max(todayScore, storedHighScore);
     
-    if (todayScore > storedHighScore) {
-      localStorage.setItem(`activityHighScore_${userId}`, String(todayScore));
-      localStorage.setItem(`activityHighScoreDate_${userId}`, getTodayKey());
-    }
+    // Store in 7-day history
+    storeActivityScoreForDay(userId, getTodayKey(), todayScore);
+    const newHighScore = updateHighScoreFromHistory(
+      userId,
+      parseInt(localStorage.getItem(`activityHighScore_${userId}`) || '0', 10)
+    );
+    
+    // Calculate weekday streak
+    const currentStreak = calculateWeekdayStreak(leads);
+    const longestStreak = calculateLongestStreak(leads);
+    const activityDates = getActivityDatesFromLeads(leads);
+    
+    setStreak({
+      currentStreak,
+      longestStreak,
+      lastActivityDate: activityDates.length > 0 ? activityDates[activityDates.length - 1] : null,
+      activityDates
+    });
     
     // Update score based on lead stats
     setScore(prev => ({

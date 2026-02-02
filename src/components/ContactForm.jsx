@@ -30,6 +30,7 @@ const ContactForm = ({ contact, onSubmit, onCancel }) => {
     introducedBy: '',
     contactRegularity: '6-months',
     lastContactDate: '',
+    alwaysGreen: false, // Friends/family who stay green regardless of contact date
     // Reminder fields
     reminderEnabled: true,
     reminderInterval: DEFAULT_CRM_INTERVAL,
@@ -516,6 +517,7 @@ const ContactForm = ({ contact, onSubmit, onCancel }) => {
             value={formData.contactRegularity || '6-months'}
             onChange={(e) => setFormData({ ...formData, contactRegularity: e.target.value })}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={formData.alwaysGreen}
           >
             {CONTACT_REGULARITY_OPTIONS.map(opt => (
               <option key={opt.value} value={opt.value}>
@@ -524,6 +526,29 @@ const ContactForm = ({ contact, onSubmit, onCancel }) => {
             ))}
           </select>
           <p className="text-xs text-gray-500 mt-1">How often to stay in touch</p>
+        </div>
+      </div>
+
+      {/* Always Green Toggle - Friends/Family */}
+      <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <span>💚</span> Always Green (Friend/Family)
+            </label>
+            <p className="text-xs text-gray-500 mt-1">
+              Close connections that stay green regardless of last contact date
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={formData.alwaysGreen || false}
+              onChange={(e) => setFormData({ ...formData, alwaysGreen: e.target.checked })}
+              className="sr-only peer"
+            />
+            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
+          </label>
         </div>
       </div>
 

@@ -1,18 +1,19 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Users, X, Edit, Link as LinkIcon, Plus, UserPlus } from 'lucide-react';
+import { ArrowLeft, Users, X, Edit, Link as LinkIcon, Plus, UserPlus, Palette } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useContacts } from '../contexts/ContactContext';
+import { useSettings } from '../contexts/SettingsContext';
 import NetworkGraph from '../components/NetworkGraph';
 import GraphControls from '../components/GraphControls';
 import ContactForm from '../components/ContactForm';
 import AIAssistant from '../components/AIAssistant';
 import { getConnections, addConnection, recordIntroduction, recordMutualConnection, CONNECTION_TYPES } from '../services/connectionService';
-import { RELATIONSHIP_TYPES } from '../constants/categories';
 
 const NetworkGraphPage = () => {
   const { currentUser } = useAuth();
   const { contacts, updateContact } = useContacts();
+  const { graphColors, relationshipTypes, updateGraphColor, getRelationshipTypeLabel } = useSettings();
   const graphRef = useRef(null);
   
   // Graph state
@@ -21,6 +22,7 @@ const NetworkGraphPage = () => {
   const [showIntroductions, setShowIntroductions] = useState(true);
   const [showMutualConnections, setShowMutualConnections] = useState(true);
   const [connections, setConnections] = useState([]);
+  const [showColorSettings, setShowColorSettings] = useState(false);
   
   // UI state
   const [selectedNode, setSelectedNode] = useState(null);
@@ -146,11 +148,7 @@ const NetworkGraphPage = () => {
     setShowEditForm(false);
   };
   
-  // Get relationship label
-  const getRelationshipLabel = (value) => {
-    const type = RELATIONSHIP_TYPES.find(t => t.value === value);
-    return type ? type.label : value || 'Not set';
-  };
+  // Note: Using getRelationshipTypeLabel from useSettings instead of local function
   
   if (!currentUser) {
     return (
@@ -220,6 +218,7 @@ const NetworkGraphPage = () => {
             selectedNode={selectedNode}
             onNodeClick={handleNodeClick}
             graphRef={graphRef}
+            customColors={graphColors}
           />
           
           {/* View type toggle (floating) */}
@@ -243,6 +242,17 @@ const NetworkGraphPage = () => {
               }`}
             >
               Strategic Value
+            </button>
+          </div>
+          
+          {/* Color Settings Button */}
+          <div className="absolute top-4 right-4 z-10">
+            <button
+              onClick={() => setShowColorSettings(true)}
+              className="flex items-center gap-2 px-3 py-2 bg-white rounded-lg shadow-md hover:bg-gray-50 transition-colors"
+            >
+              <Palette size={18} className="text-purple-600" />
+              <span className="text-sm font-medium text-gray-700">Colors</span>
             </button>
           </div>
           
@@ -320,7 +330,7 @@ const NetworkGraphPage = () => {
                           : (selectedContact.relationshipType ? [selectedContact.relationshipType] : [])
                         ).map((type, idx) => (
                           <span key={idx} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs">
-                            {getRelationshipLabel(type)}
+                            {getRelationshipTypeLabel(type)}
                           </span>
                         ))}
                         {!selectedContact.relationshipTypes?.length && !selectedContact.relationshipType && (
@@ -492,6 +502,53 @@ const NetworkGraphPage = () => {
                   Add Connection
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Color Settings Modal */}
+      {showColorSettings && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowColorSettings(false)}>
+          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Palette className="text-purple-600" size={20} />
+                Graph Color Settings
+              </h3>
+              <button onClick={() => setShowColorSettings(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <p className="text-sm text-gray-500 mb-4">
+              Customize colors for each relationship type on the network graph.
+            </p>
+            
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {relationshipTypes.map(type => (
+                <div key={type.value} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm font-medium text-gray-700">{type.label}</span>
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-6 h-6 rounded-full border-2 border-gray-300"
+                      style={{ backgroundColor: graphColors[type.value] || graphColors.default || '#6b7280' }}
+                    />
+                    <input
+                      type="color"
+                      value={graphColors[type.value] || graphColors.default || '#6b7280'}
+                      onChange={(e) => updateGraphColor(type.value, e.target.value)}
+                      className="w-8 h-8 cursor-pointer rounded"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <p className="text-xs text-gray-400 text-center">
+                Colors will update instantly on the graph
+              </p>
             </div>
           </div>
         </div>

@@ -13,7 +13,8 @@ const NetworkGraph = ({
   onNodeClick,
   onNodeHover,
   onLinkClick,
-  graphRef
+  graphRef,
+  customColors
 }) => {
   const containerRef = useRef(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
@@ -46,7 +47,8 @@ const NetworkGraph = ({
       {
         showIntroductions,
         showMutualConnections,
-        circleSpacing: 120
+        circleSpacing: 120,
+        customColors
       }
     );
     
@@ -77,7 +79,7 @@ const NetworkGraph = ({
     }));
     
     setGraphData({ nodes, links });
-  }, [contacts, connections, viewType, filters, showIntroductions, showMutualConnections]);
+  }, [contacts, connections, viewType, filters, showIntroductions, showMutualConnections, customColors]);
   
   // Node rendering
   const nodeCanvasObject = useCallback((node, ctx, globalScale) => {

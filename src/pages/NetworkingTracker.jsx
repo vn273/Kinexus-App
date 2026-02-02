@@ -768,7 +768,32 @@ const NetworkingTracker = () => {
       if (editingLead) {
         // Update existing lead - no duplicate check needed
         await networkingService.updateNetworkingLead(editingLead.id, formData);
-        alert('Lead updated successfully!');
+        
+        // Auto-convert to contact if callScheduled is newly set to true
+        if (formData.callScheduled && !editingLead.callScheduled && !editingLead.linkedContactId) {
+          const leadWithId = { ...formData, id: editingLead.id };
+          const contactData = buildContactDataFromLead(
+            leadWithId, 
+            'Auto-converted from networking lead (call scheduled)'
+          );
+          
+          const duplicates = checkDuplicates(contactData);
+          if (duplicates.hasDuplicates) {
+            setPendingConversion({ lead: leadWithId, contactData, conversionType: 'call-scheduled' });
+            setDuplicateResult(duplicates);
+            setShowDuplicateModal(true);
+            setShowLeadForm(false);
+            setEditingLead(null);
+            await loadLeads();
+            return;
+          }
+          
+          await processConversion(leadWithId, contactData);
+          alert('Lead updated and auto-converted to contact!');
+        } else {
+          alert('Lead updated successfully!');
+        }
+        
         setShowLeadForm(false);
         setEditingLead(null);
         await loadLeads();
@@ -785,7 +810,7 @@ const NetworkingTracker = () => {
         }
         
         // No duplicates, add the lead
-        await networkingService.addNetworkingLead(currentUser.uid, formData);
+        const newLeadId = await networkingService.addNetworkingLead(currentUser.uid, formData);
         
         // Log gamification activity for lead added
         if (currentUser) {
@@ -795,7 +820,31 @@ const NetworkingTracker = () => {
           });
         }
         
-        alert('Lead added successfully!');
+        // Auto-convert to contact if callScheduled is true on new lead
+        if (formData.callScheduled) {
+          const leadWithId = { ...formData, id: newLeadId };
+          const contactData = buildContactDataFromLead(
+            leadWithId, 
+            'Auto-converted from networking lead (call scheduled)'
+          );
+          
+          const contactDuplicates = checkDuplicates(contactData);
+          if (contactDuplicates.hasDuplicates) {
+            setPendingConversion({ lead: leadWithId, contactData, conversionType: 'call-scheduled' });
+            setDuplicateResult(contactDuplicates);
+            setShowDuplicateModal(true);
+            setShowLeadForm(false);
+            setEditingLead(null);
+            await loadLeads();
+            return;
+          }
+          
+          await processConversion(leadWithId, contactData);
+          alert('Lead added and auto-converted to contact!');
+        } else {
+          alert('Lead added successfully!');
+        }
+        
         setShowLeadForm(false);
         setEditingLead(null);
         await loadLeads();

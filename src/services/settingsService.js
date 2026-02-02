@@ -19,6 +19,19 @@ export const DEFAULT_RELATIONSHIP_TYPES = [
   { value: 'mentors-advisors', label: 'Mentors/Advisors' },
 ];
 
+// Default graph colors for relationship types
+export const DEFAULT_GRAPH_COLORS = {
+  'high-school': '#f59e0b',           // amber
+  'college-ucla': '#3b82f6',          // blue
+  'professional-worked': '#10b981',   // green
+  'professional-networking': '#14b8a6', // teal
+  'personal-friends': '#8b5cf6',      // purple
+  'family': '#ef4444',                // red
+  'mentors-advisors': '#ec4899',      // pink
+  'personal-other': '#6366f1',        // indigo
+  'default': '#6b7280'                // gray
+};
+
 // Default sectors
 export const DEFAULT_SECTORS = [
   { value: 'technology', label: 'Technology' },

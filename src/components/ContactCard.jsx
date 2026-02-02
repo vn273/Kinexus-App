@@ -1,9 +1,12 @@
-import { Building2, Mail, Phone, Linkedin, Calendar, MapPin, Briefcase, GraduationCap } from 'lucide-react';
+import { Building2, Mail, Phone, Linkedin, Calendar, MapPin, Briefcase, GraduationCap, Heart } from 'lucide-react';
 import { getContactStatusColor, formatDate } from '../utils/dateHelpers';
 import { getRelationshipTypeLabel, getSectorLabel } from '../constants/categories';
 
 const ContactCard = ({ contact, onClick }) => {
-  const statusColor = getContactStatusColor(contact.lastContactDate, contact.contactRegularity);
+  // Always green contacts stay green regardless of last contact date
+  const statusColor = contact.alwaysGreen 
+    ? 'green' 
+    : getContactStatusColor(contact.lastContactDate, contact.contactRegularity);
   
   const statusColorClasses = {
     green: 'bg-green-100 border-green-400',
@@ -32,10 +35,13 @@ const ContactCard = ({ contact, onClick }) => {
       className={`p-4 rounded-lg border-2 cursor-pointer hover:shadow-lg transition-shadow ${statusColorClasses[statusColor]}`}
     >
       {/* Header with name */}
-      <div className="mb-2">
+      <div className="mb-2 flex items-center gap-2">
         <h3 className="text-lg font-semibold text-gray-900">
           {contact.firstName} {contact.lastName}
         </h3>
+        {contact.alwaysGreen && (
+          <Heart size={16} className="text-pink-500 fill-pink-500" title="Close friend/family (always green)" />
+        )}
       </div>
 
       {/* Job title and company */}

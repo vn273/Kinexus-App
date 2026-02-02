@@ -4,7 +4,8 @@ import {
   getUserSettings, 
   saveUserSettings,
   DEFAULT_RELATIONSHIP_TYPES,
-  DEFAULT_SECTORS
+  DEFAULT_SECTORS,
+  DEFAULT_GRAPH_COLORS
 } from '../services/settingsService';
 
 const SettingsContext = createContext();
@@ -21,6 +22,7 @@ export const SettingsProvider = ({ children }) => {
   const { currentUser } = useAuth();
   const [relationshipTypes, setRelationshipTypes] = useState(DEFAULT_RELATIONSHIP_TYPES);
   const [sectors, setSectors] = useState(DEFAULT_SECTORS);
+  const [graphColors, setGraphColors] = useState(DEFAULT_GRAPH_COLORS);
   const [monthlyGoalTargets, setMonthlyGoalTargets] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -30,6 +32,7 @@ export const SettingsProvider = ({ children }) => {
       if (!currentUser) {
         setRelationshipTypes(DEFAULT_RELATIONSHIP_TYPES);
         setSectors(DEFAULT_SECTORS);
+        setGraphColors(DEFAULT_GRAPH_COLORS);
         setMonthlyGoalTargets(null);
         setLoading(false);
         return;
@@ -39,6 +42,7 @@ export const SettingsProvider = ({ children }) => {
         const settings = await getUserSettings(currentUser.uid);
         setRelationshipTypes(settings.relationshipTypes || DEFAULT_RELATIONSHIP_TYPES);
         setSectors(settings.sectors || DEFAULT_SECTORS);
+        setGraphColors(settings.graphColors || DEFAULT_GRAPH_COLORS);
         setMonthlyGoalTargets(settings.monthlyGoalTargets || null);
       } catch (error) {
         console.error('Error loading settings:', error);
@@ -134,16 +138,34 @@ export const SettingsProvider = ({ children }) => {
     return updated;
   };
 
+  // Update graph color for a relationship type
+  const updateGraphColor = async (relationshipTypeValue, newColor) => {
+    if (!currentUser) return;
+    
+    const updated = { ...graphColors, [relationshipTypeValue]: newColor };
+    setGraphColors(updated);
+    
+    await saveUserSettings(currentUser.uid, { graphColors: updated });
+    return updated;
+  };
+
+  // Get graph color for a relationship type
+  const getGraphColor = (relationshipTypeValue) => {
+    return graphColors[relationshipTypeValue] || graphColors.default || DEFAULT_GRAPH_COLORS.default;
+  };
+
   // Reset to defaults
   const resetToDefaults = async () => {
     if (!currentUser) return;
     
     setRelationshipTypes(DEFAULT_RELATIONSHIP_TYPES);
     setSectors(DEFAULT_SECTORS);
+    setGraphColors(DEFAULT_GRAPH_COLORS);
     
     await saveUserSettings(currentUser.uid, {
       relationshipTypes: DEFAULT_RELATIONSHIP_TYPES,
-      sectors: DEFAULT_SECTORS
+      sectors: DEFAULT_SECTORS,
+      graphColors: DEFAULT_GRAPH_COLORS
     });
   };
 
@@ -170,6 +192,7 @@ export const SettingsProvider = ({ children }) => {
   const value = {
     relationshipTypes,
     sectors,
+    graphColors,
     monthlyGoalTargets,
     loading,
     addRelationshipType,
@@ -178,6 +201,8 @@ export const SettingsProvider = ({ children }) => {
     addSector,
     removeSector,
     updateSector,
+    updateGraphColor,
+    getGraphColor,
     resetToDefaults,
     updateMonthlyGoalTargets,
     getRelationshipTypeLabel,

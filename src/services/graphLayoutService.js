@@ -21,7 +21,7 @@ export const STRATEGIC_VALUE_LEVELS = [
   { min: 1, max: 2, label: 'Minimal Value', description: 'Social only' }
 ];
 
-// Relationship type colors
+// Relationship type colors (default fallback)
 export const RELATIONSHIP_COLORS = {
   family: '#ef4444', // red
   college_ucla: '#3b82f6', // blue
@@ -37,8 +37,15 @@ export const RELATIONSHIP_COLORS = {
 
 /**
  * Get the color for a relationship type
+ * @param {string} relationshipType - The relationship type value
+ * @param {object} customColors - Optional custom colors from settings
  */
-export const getRelationshipColor = (relationshipType) => {
+export const getRelationshipColor = (relationshipType, customColors = null) => {
+  // First check custom colors from settings
+  if (customColors && customColors[relationshipType]) {
+    return customColors[relationshipType];
+  }
+  // Then check default RELATIONSHIP_COLORS
   return RELATIONSHIP_COLORS[relationshipType] || RELATIONSHIP_COLORS.default;
 };
 
@@ -161,7 +168,8 @@ export const calculateGraphLayout = (contacts, viewType, connections, filters = 
     showMutualConnections = true,
     centerRadius = 0,
     circleSpacing = 150,
-    maxRadius = 600
+    maxRadius = 600,
+    customColors = null // Custom colors from settings
   } = options;
   
   const layout = { 
@@ -294,7 +302,7 @@ export const calculateGraphLayout = (contacts, viewType, connections, filters = 
         y,
         label: `${contact.firstName} ${contact.lastName}`,
         size: calculateNodeSize(contact),
-        color: getRelationshipColor((contact.relationshipTypes?.[0]) || contact.relationshipType),
+        color: getRelationshipColor((contact.relationshipTypes?.[0]) || contact.relationshipType, customColors),
         type: 'contact',
         data: contact,
         circle: circleIndex
@@ -311,7 +319,7 @@ export const calculateGraphLayout = (contacts, viewType, connections, filters = 
     layout.edges.push({
       source: 'user',
       target: contact.id,
-      color: getRelationshipColor((contact.relationshipTypes?.[0]) || contact.relationshipType),
+      color: getRelationshipColor((contact.relationshipTypes?.[0]) || contact.relationshipType, customColors),
       width: Math.max(1, closeness / 3),
       type: 'user-contact'
     });
