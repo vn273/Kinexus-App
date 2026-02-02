@@ -1117,7 +1117,7 @@ const NetworkingTracker = () => {
               </div>
               
               {/* Monthly Goal Progress */}
-              <div className="bg-white/10 backdrop-blur p-4 rounded-xl">
+              <Link to="/settings" className="bg-white/10 backdrop-blur p-4 rounded-xl hover:bg-white/20 transition-colors block">
                 <div className="flex items-center gap-2 mb-1">
                   <Target size={16} className="text-green-400" />
                   <span className="text-sm text-slate-300">Monthly Goals</span>
@@ -1130,18 +1130,22 @@ const NetworkingTracker = () => {
                   ) : 0}%
                 </div>
                 <div className="text-xs text-slate-400">
-                  {goals?.targets ? `${Object.keys(goals.targets).filter(k => (goals.progress?.[k] || 0) >= (goals.targets[k] || 1)).length}/${Object.keys(goals.targets).length} completed` : 'Set goals to track'}
+                  {goals?.targets ? `${Object.keys(goals.targets).filter(k => (goals.progress?.[k] || 0) >= (goals.targets[k] || 1)).length}/${Object.keys(goals.targets).length} completed` : 'Set goals to track →'}
                 </div>
-              </div>
+              </Link>
               
-              {/* Activity This Week */}
+              {/* Activity Score Today */}
               <div className="bg-white/10 backdrop-blur p-4 rounded-xl">
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp size={16} className="text-blue-400" />
-                  <span className="text-sm text-slate-300">Activity Score</span>
+                  <span className="text-sm text-slate-300">Today's Activity</span>
                 </div>
                 <div className="text-2xl font-bold">{score?.activityScore || 0}</div>
-                <div className="text-xs text-slate-400">points this period</div>
+                <div className="text-xs text-slate-400">
+                  {score?.activityHighScore > 0 && score?.activityHighScore > (score?.activityScore || 0) 
+                    ? `Best: ${score.activityHighScore} pts` 
+                    : score?.activityScore > 0 ? '🔥 New high!' : 'points today'}
+                </div>
               </div>
             </div>
             

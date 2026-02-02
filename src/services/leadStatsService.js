@@ -13,6 +13,18 @@ const isToday = (dateValue) => {
          date.getFullYear() === today.getFullYear();
 };
 
+// Helper to check if a lead was created today (check createdAt field)
+const isLeadCreatedToday = (lead) => {
+  if (!lead.createdAt) return false;
+  return isToday(lead.createdAt);
+};
+
+// Helper to check if a lead was created this month
+const isLeadCreatedThisMonth = (lead) => {
+  if (!lead.createdAt) return false;
+  return isThisMonth(lead.createdAt);
+};
+
 // Helper to check if a date is in the current month
 const isThisMonth = (dateValue) => {
   if (!dateValue) return false;
@@ -61,12 +73,23 @@ export const calculateLeadStats = (leads, period = 'all') => {
 
   // Calculate statistics based on lead data
   const stats = {
+    // New leads created in the period
+    leadsCreated: leads.filter(lead => {
+      if (period === 'today') {
+        return isLeadCreatedToday(lead);
+      } else if (period === 'month') {
+        return isLeadCreatedThisMonth(lead);
+      }
+      return true;
+    }).length,
+
     // Messages sent = leads where reachedOut is true
     messagesSent: leads.filter(lead => {
       if (period === 'today') {
-        return lead.reachedOut && isToday(toDate(lead.dateReachedOut));
+        // Count if reached out today OR if the lead was created today with reachedOut
+        return lead.reachedOut && (isToday(toDate(lead.dateReachedOut)) || (isLeadCreatedToday(lead) && lead.reachedOut));
       } else if (period === 'month') {
-        return lead.reachedOut && isThisMonth(toDate(lead.dateReachedOut));
+        return lead.reachedOut && (isThisMonth(toDate(lead.dateReachedOut)) || (isLeadCreatedThisMonth(lead) && lead.reachedOut));
       }
       return lead.reachedOut;
     }).length,
@@ -80,16 +103,17 @@ export const calculateLeadStats = (leads, period = 'all') => {
     // Responses = leads where response is true
     responses: leads.filter(lead => {
       if (period === 'today') {
-        return lead.response && isToday(toDate(lead.responseDate));
+        return lead.response && (isToday(toDate(lead.responseDate)) || isLeadCreatedToday(lead));
       } else if (period === 'month') {
-        return lead.response && isThisMonth(toDate(lead.responseDate));
+        return lead.response && (isThisMonth(toDate(lead.responseDate)) || isLeadCreatedThisMonth(lead));
       }
       return lead.response;
     }).length,
 
-    // Calls = leads where callScheduled is true
+    // Calls = leads where callScheduled is true AND call date is today
     calls: leads.filter(lead => {
       if (period === 'today') {
+        // Call scheduled for today
         return lead.callScheduled && isToday(toDate(lead.callDate));
       } else if (period === 'month') {
         return lead.callScheduled && isThisMonth(toDate(lead.callDate));
@@ -108,6 +132,14 @@ export const calculateLeadStats = (leads, period = 'all') => {
     (stats.calls * LEAD_POINTS.calls);
 
   return stats;
+};
+
+/**
+ * Get today's activity score date key (for high score tracking)
+ */
+export const getTodayKey = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 };
 
 /**

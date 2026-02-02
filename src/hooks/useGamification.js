@@ -25,7 +25,8 @@ import {
 import {
   calculateLeadStats,
   getAllLeadStats,
-  LEAD_POINTS
+  LEAD_POINTS,
+  getTodayKey
 } from '../services/leadStatsService';
 import {
   ACHIEVEMENTS,
@@ -44,7 +45,7 @@ const useGamification = () => {
   const { contacts } = useContacts();
   
   // State - with safe defaults
-  const [score, setScore] = useState({ totalScore: 0, activityScore: 0, qualityScore: 0, relationshipScore: 0, consistencyScore: 0 });
+  const [score, setScore] = useState({ totalScore: 0, activityScore: 0, activityHighScore: 0, qualityScore: 0, relationshipScore: 0, consistencyScore: 0 });
   const [streak, setStreak] = useState({ currentStreak: 0, longestStreak: 0, lastActivityDate: null });
   const [achievements, setAchievements] = useState({ unlockedAchievements: [], totalPoints: 0 });
   const [goals, setGoals] = useState({ targets: {}, progress: {} });
@@ -60,10 +61,12 @@ const useGamification = () => {
     if (!currentUser) {
       // Demo mode - set demo data with 4-goal structure
       const totalContacts = contacts?.length || 0;
+      const demoHighScore = parseInt(localStorage.getItem('activityHighScore_guest') || '0', 10);
       
       setScore({
         totalScore: totalContacts * 10 + 15,
         activityScore: Math.min(totalContacts * 5, 200),
+        activityHighScore: Math.max(demoHighScore, Math.min(totalContacts * 5, 200)),
         qualityScore: 100,
         relationshipScore: Math.min(totalContacts * 8, 400),
         consistencyScore: 30
@@ -115,7 +118,13 @@ const useGamification = () => {
           getActivityHistory(currentUser.uid, 30)
         ]);
       
-      setScore(scoreData);
+      // Load activity high score from localStorage
+      const storedHighScore = parseInt(localStorage.getItem(`activityHighScore_${currentUser.uid}`) || '0', 10);
+      
+      setScore({
+        ...scoreData,
+        activityHighScore: storedHighScore
+      });
       setStreak(streakData);
       setAchievements(achievementsData);
       setGoals(goalsData);
@@ -203,11 +212,22 @@ const useGamification = () => {
       const stats = getAllLeadStats(leads);
       setLeadStats(stats);
       
+      // Check and update activity high score
+      const todayScore = stats.today.totalPoints;
+      const storedHighScore = parseInt(localStorage.getItem(`activityHighScore_${currentUser.uid}`) || '0', 10);
+      const newHighScore = Math.max(todayScore, storedHighScore);
+      
+      if (todayScore > storedHighScore) {
+        localStorage.setItem(`activityHighScore_${currentUser.uid}`, String(todayScore));
+        localStorage.setItem(`activityHighScoreDate_${currentUser.uid}`, getTodayKey());
+      }
+      
       // Update score based on lead stats
       setScore(prev => ({
         ...prev,
         totalScore: stats.allTime.totalPoints,
-        activityScore: stats.today.totalPoints
+        activityScore: todayScore,
+        activityHighScore: newHighScore
       }));
       
       // Sync goals with lead data
@@ -227,15 +247,27 @@ const useGamification = () => {
     const stats = getAllLeadStats(leads);
     setLeadStats(stats);
     
+    // Check high score (using a general key for non-logged-in users)
+    const userId = currentUser?.uid || 'guest';
+    const todayScore = stats.today.totalPoints;
+    const storedHighScore = parseInt(localStorage.getItem(`activityHighScore_${userId}`) || '0', 10);
+    const newHighScore = Math.max(todayScore, storedHighScore);
+    
+    if (todayScore > storedHighScore) {
+      localStorage.setItem(`activityHighScore_${userId}`, String(todayScore));
+      localStorage.setItem(`activityHighScoreDate_${userId}`, getTodayKey());
+    }
+    
     // Update score based on lead stats
     setScore(prev => ({
       ...prev,
       totalScore: stats.allTime.totalPoints,
-      activityScore: stats.today.totalPoints
+      activityScore: todayScore,
+      activityHighScore: newHighScore
     }));
     
     return stats;
-  }, []);
+  }, [currentUser]);
 
   // Toggle target company
   const setTargetCompany = useCallback(async (companyName, isTarget) => {
