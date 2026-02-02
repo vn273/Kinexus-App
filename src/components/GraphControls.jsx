@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { ChevronDown, ChevronRight, RefreshCw, Download, Eye, EyeOff, Filter, X } from 'lucide-react';
-import { RELATIONSHIP_TYPES, SECTORS } from '../constants/categories';
+import { RELATIONSHIP_TYPES, SECTORS, formatValueToLabel } from '../constants/categories';
 import { CLOSENESS_LEVELS, STRATEGIC_VALUE_LEVELS, getFilterOptions } from '../services/graphLayoutService';
 
 const GraphControls = ({
@@ -53,10 +53,12 @@ const GraphControls = ({
   
   const activeFiltersCount = Object.keys(filters).length;
   
-  // Get label for relationship type
+  // Get label for relationship type (handles custom types too)
   const getRelationshipLabel = (value) => {
     const type = RELATIONSHIP_TYPES.find(t => t.value === value);
-    return type ? type.label : value;
+    if (type) return type.label;
+    // Format custom types: 'personal-other' -> 'Personal Other'
+    return formatValueToLabel(value);
   };
   
   // Get label for sector

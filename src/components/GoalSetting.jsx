@@ -55,23 +55,23 @@ const GoalSetting = ({ compact = false }) => {
     }));
   };
 
-  // Calculate overall progress
+  // Calculate overall progress as sum of each sub-goal percentage × 25% (rounded for UI)
   const overallProgress = (() => {
     if (!goals?.targets || !goals?.progress) return 0;
     
     let totalProgress = 0;
-    let metricCount = 0;
     
     GOAL_METRICS.forEach(metric => {
-      const target = goals.targets[metric.id];
+      const target = goals.targets[metric.id] || metric.defaultTarget;
       const current = goals.progress[metric.id] || 0;
       if (target > 0) {
-        totalProgress += Math.min((current / target) * 100, 100);
-        metricCount++;
+        // Each goal contributes 25% when fully complete
+        const goalProgress = Math.min((current / target) * 100, 100);
+        totalProgress += goalProgress * 0.25; // 25% weight per goal
       }
     });
     
-    return metricCount > 0 ? Math.round(totalProgress / metricCount) : 0;
+    return Math.round(totalProgress);
   })();
 
   if (loading) {

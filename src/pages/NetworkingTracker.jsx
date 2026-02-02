@@ -1173,13 +1173,15 @@ const NetworkingTracker = () => {
                 </div>
                 <div className="text-2xl font-bold">
                   {goals?.progress && goals?.targets ? Math.round(
-                    Object.keys(goals.targets).filter(k => 
-                      (goals.progress[k] || 0) >= (goals.targets[k] || 1)
-                    ).length / Math.max(Object.keys(goals.targets).length, 1) * 100
+                    ['coldEmails', 'followUps', 'responses', 'calls'].reduce((sum, key) => {
+                      const target = goals.targets[key] || 1;
+                      const current = goals.progress[key] || 0;
+                      return sum + Math.min((current / target) * 100, 100) * 0.25;
+                    }, 0)
                   ) : 0}%
                 </div>
                 <div className="text-xs text-slate-400">
-                  {goals?.targets ? `${Object.keys(goals.targets).filter(k => (goals.progress?.[k] || 0) >= (goals.targets[k] || 1)).length}/${Object.keys(goals.targets).length} completed` : 'Set goals to track →'}
+                  {goals?.targets ? `${['coldEmails', 'followUps', 'responses', 'calls'].filter(k => (goals.progress?.[k] || 0) >= (goals.targets[k] || 1)).length}/4 completed` : 'Set goals to track →'}
                 </div>
               </Link>
               

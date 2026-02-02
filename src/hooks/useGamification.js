@@ -52,7 +52,7 @@ const useGamification = () => {
   
   // State - with safe defaults
   const [score, setScore] = useState({ totalScore: 0, activityScore: 0, activityHighScore: 0, qualityScore: 0, relationshipScore: 0, consistencyScore: 0 });
-  const [streak, setStreak] = useState({ currentStreak: 0, longestStreak: 0, lastActivityDate: null });
+  const [streak, setStreak] = useState({ currentStreak: 0, longestStreak: 0, lastActivityDate: null, activityDates: [] });
   const [achievements, setAchievements] = useState({ unlockedAchievements: [], totalPoints: 0 });
   const [goals, setGoals] = useState({ targets: {}, progress: {} });
   const [companyScores, setCompanyScores] = useState([]);
@@ -78,10 +78,25 @@ const useGamification = () => {
         consistencyScore: 30
       });
       
+      // Demo mode activity dates (last few weekdays)
+      const demoActivityDates = [];
+      const today = new Date();
+      let demoDate = new Date(today);
+      let daysAdded = 0;
+      while (daysAdded < 3) {
+        const day = demoDate.getDay();
+        if (day !== 0 && day !== 6) { // Skip weekends
+          demoActivityDates.unshift(`${demoDate.getFullYear()}-${String(demoDate.getMonth() + 1).padStart(2, '0')}-${String(demoDate.getDate()).padStart(2, '0')}`);
+          daysAdded++;
+        }
+        demoDate.setDate(demoDate.getDate() - 1);
+      }
+      
       setStreak({
         currentStreak: 3,
         longestStreak: 7,
-        lastActivityDate: new Date().toISOString()
+        lastActivityDate: new Date().toISOString(),
+        activityDates: demoActivityDates
       });
       
       // Demo mode with 4 goals only
@@ -131,7 +146,11 @@ const useGamification = () => {
         ...scoreData,
         activityHighScore: storedHighScore
       });
-      setStreak(streakData);
+      // Preserve activityDates if not in Firebase data (they come from leads)
+      setStreak(prev => ({
+        ...streakData,
+        activityDates: streakData.activityDates || prev.activityDates || []
+      }));
       setAchievements(achievementsData);
       setGoals(goalsData);
       setCompanyScores(companyData);

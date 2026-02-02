@@ -5,17 +5,21 @@ import useGamification from '../hooks/useGamification';
 import 'react-calendar/dist/Calendar.css';
 
 const StreakTracker = ({ compact = false }) => {
-  const { streak, currentMultiplier, loading } = useGamification();
-  const [showCalendar, setShowCalendar] = useState(false);
+  const { streak, currentMultiplier, loading, leadStats } = useGamification();
 
   const currentStreak = streak?.currentStreak || 0;
   const longestStreak = streak?.longestStreak || 0;
   const lastActivityDate = streak?.lastActivityDate;
   const activityDates = streak?.activityDates || [];
 
+  // Debug: Log activity dates
+  console.log('StreakTracker activityDates:', activityDates);
+
   // Convert activity dates to Set for quick lookup
   const activityDateSet = useMemo(() => {
-    return new Set(activityDates);
+    const set = new Set(activityDates);
+    console.log('Activity date set:', Array.from(set));
+    return set;
   }, [activityDates]);
 
   // Check if streak is at risk (no activity today and last activity was yesterday)
@@ -44,11 +48,12 @@ const StreakTracker = ({ compact = false }) => {
     if (view !== 'month') return null;
     
     const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const isWeekend = date.getDay() === 0 || date.getDay() === 6;
     
     if (activityDateSet.has(dateKey)) {
       return (
         <div className="flex justify-center mt-1">
-          <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+          <div className={`w-2 h-2 rounded-full ${isWeekend ? 'bg-orange-300' : 'bg-orange-500'}`}></div>
         </div>
       );
     }
@@ -64,13 +69,81 @@ const StreakTracker = ({ compact = false }) => {
     
     let classes = [];
     if (activityDateSet.has(dateKey)) {
-      classes.push('activity-day');
+      classes.push(isWeekend ? 'activity-day-weekend' : 'activity-day');
     }
     if (isWeekend) {
       classes.push('weekend-day');
     }
     return classes.join(' ');
   };
+
+  // Calendar styles
+  const calendarStyles = `
+    .react-calendar {
+      width: 100%;
+      border: none;
+      font-family: inherit;
+      background: transparent;
+    }
+    .react-calendar__navigation {
+      margin-bottom: 0.5em;
+    }
+    .react-calendar__navigation button {
+      min-width: 32px;
+      background: none;
+      font-size: 14px;
+    }
+    .react-calendar__navigation button:hover {
+      background: #f3f4f6;
+      border-radius: 4px;
+    }
+    .react-calendar__month-view__weekdays {
+      font-size: 10px;
+      font-weight: 600;
+      color: #6b7280;
+    }
+    .react-calendar__month-view__weekdays__weekday {
+      padding: 0.25em;
+    }
+    .react-calendar__month-view__weekdays__weekday abbr {
+      text-decoration: none;
+    }
+    .react-calendar__tile {
+      padding: 0.4em 0.25em;
+      font-size: 12px;
+      border-radius: 4px;
+    }
+    .react-calendar__tile:hover {
+      background: #f3f4f6;
+    }
+    .react-calendar__tile.activity-day {
+      background: #fed7aa !important;
+      color: #c2410c;
+      font-weight: 600;
+    }
+    .react-calendar__tile.activity-day:hover {
+      background: #fdba74 !important;
+    }
+    .react-calendar__tile.activity-day-weekend {
+      background: #fef3c7 !important;
+      color: #d97706;
+      font-weight: 500;
+    }
+    .react-calendar__tile.activity-day-weekend:hover {
+      background: #fde68a !important;
+    }
+    .react-calendar__tile.weekend-day {
+      color: #9ca3af;
+    }
+    .react-calendar__tile--now {
+      background: #dbeafe !important;
+      color: #1d4ed8;
+    }
+    .react-calendar__tile--active {
+      background: #3b82f6 !important;
+      color: white !important;
+    }
+  `;
 
   if (loading) {
     return (
@@ -81,17 +154,18 @@ const StreakTracker = ({ compact = false }) => {
     );
   }
 
+  // Compact version with inline calendar
   if (compact) {
     return (
-      <>
-        <div 
-          className={`rounded-xl p-4 cursor-pointer hover:opacity-90 transition-opacity ${
-            currentStreak > 0 
-              ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white' 
-              : 'bg-gray-100 text-gray-700'
-          }`}
-          onClick={() => setShowCalendar(true)}
-        >
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <style>{calendarStyles}</style>
+        
+        {/* Header with streak info */}
+        <div className={`p-4 ${
+          currentStreak > 0 
+            ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white' 
+            : 'bg-gray-100 text-gray-700'
+        }`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               {currentStreak > 0 ? (
@@ -112,9 +186,6 @@ const StreakTracker = ({ compact = false }) => {
               </div>
             )}
           </div>
-          <p className={`mt-2 text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-400'}`}>
-            Click to view calendar
-          </p>
           {isAtRisk && (
             <p className="mt-2 text-sm text-yellow-200 animate-pulse">
               ⚠️ Don't lose your streak! Log activity today.
@@ -122,101 +193,50 @@ const StreakTracker = ({ compact = false }) => {
           )}
         </div>
 
-        {/* Calendar Modal */}
-        {showCalendar && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCalendar(false)}>
-            <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <Flame className="text-orange-500" size={20} />
-                  Activity Calendar
-                </h3>
-                <button onClick={() => setShowCalendar(false)} className="text-gray-400 hover:text-gray-600">
-                  <X size={20} />
-                </button>
-              </div>
-              
-              <div className="mb-4 flex items-center gap-4 text-sm">
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                  <span className="text-gray-600">Activity day</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-3 h-3 rounded bg-gray-200"></div>
-                  <span className="text-gray-600">Weekend (ignored)</span>
-                </div>
-              </div>
-
-              <style>{`
-                .react-calendar {
-                  width: 100%;
-                  border: none;
-                  font-family: inherit;
-                }
-                .react-calendar__tile {
-                  padding: 0.75em 0.5em;
-                }
-                .react-calendar__tile.activity-day {
-                  background: #fed7aa !important;
-                  color: #c2410c;
-                  font-weight: 600;
-                }
-                .react-calendar__tile.activity-day:hover {
-                  background: #fdba74 !important;
-                }
-                .react-calendar__tile.weekend-day {
-                  color: #9ca3af;
-                }
-                .react-calendar__tile--now {
-                  background: #e5e7eb;
-                }
-                .react-calendar__tile--active {
-                  background: #3b82f6 !important;
-                  color: white !important;
-                }
-              `}</style>
-
-              <ReactCalendar
-                tileContent={tileContent}
-                tileClassName={tileClassName}
-                maxDate={new Date()}
-              />
-
-              <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-2 gap-4 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-orange-600">{currentStreak}</p>
-                  <p className="text-xs text-gray-500">Current Streak</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-gray-700">{longestStreak}</p>
-                  <p className="text-xs text-gray-500">Longest Streak</p>
-                </div>
-              </div>
-              
-              <p className="mt-3 text-xs text-gray-400 text-center">
-                Streak counts consecutive weekdays only (Mon-Fri)
-              </p>
+        {/* Inline Calendar */}
+        <div className="p-3">
+          <div className="mb-2 flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+              <span className="text-gray-600">Weekday</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-orange-300"></div>
+              <span className="text-gray-600">Weekend</span>
             </div>
           </div>
-        )}
-      </>
+          
+          <ReactCalendar
+            tileContent={tileContent}
+            tileClassName={tileClassName}
+            maxDate={new Date()}
+            showNeighboringMonth={false}
+            prev2Label={null}
+            next2Label={null}
+          />
+          
+          <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between text-xs text-gray-500">
+            <span>Longest: {longestStreak} days</span>
+            <span>{activityDates.length} activity days</span>
+          </div>
+        </div>
+      </div>
     );
   }
 
-  // Full version
+  // Full version with side-by-side layout
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* Header - clickable */}
-      <div 
-        className={`p-6 cursor-pointer hover:opacity-95 transition-opacity ${
+      <style>{calendarStyles}</style>
+      
+      <div className="flex flex-col lg:flex-row">
+        {/* Left: Streak Info */}
+        <div className={`flex-1 p-6 ${
           currentStreak > 0 
             ? 'bg-gradient-to-br from-orange-500 to-red-500 text-white' 
             : 'bg-gray-100'
-        }`}
-        onClick={() => setShowCalendar(true)}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        }`}>
+          <div className="flex items-center gap-4 mb-4">
             <div className={`w-16 h-16 rounded-full flex items-center justify-center ${
               currentStreak > 0 ? 'bg-white/20' : 'bg-white'
             }`}>
@@ -228,7 +248,7 @@ const StreakTracker = ({ compact = false }) => {
             </div>
             <div>
               <p className={`text-sm ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>
-                Current Streak (click for calendar)
+                Current Streak
               </p>
               <p className={`text-4xl font-bold ${currentStreak > 0 ? 'text-white' : 'text-gray-900'}`}>
                 {currentStreak} days
@@ -240,125 +260,75 @@ const StreakTracker = ({ compact = false }) => {
           </div>
           
           {currentMultiplier > 1 && (
-            <div className="text-center bg-white/20 rounded-xl px-4 py-3">
-              <TrendingUp className="mx-auto mb-1" size={20} />
-              <p className="text-2xl font-bold">{currentMultiplier}x</p>
-              <p className="text-xs text-orange-200">Point Bonus</p>
+            <div className="bg-white/20 rounded-xl px-4 py-3 inline-flex items-center gap-2">
+              <TrendingUp size={20} />
+              <span className="text-2xl font-bold">{currentMultiplier}x</span>
+              <span className="text-xs text-orange-200">Point Bonus</span>
             </div>
           )}
-        </div>
 
-        {isAtRisk && (
-          <div className="mt-4 bg-yellow-500/30 rounded-lg px-4 py-2 flex items-center gap-2">
-            <span className="animate-pulse">⚠️</span>
-            <span className="text-sm">Your streak is at risk! Log an activity today to keep it going.</span>
+          {isAtRisk && (
+            <div className="mt-4 bg-yellow-500/30 rounded-lg px-4 py-2 flex items-center gap-2">
+              <span className="animate-pulse">⚠️</span>
+              <span className="text-sm">Your streak is at risk! Log an activity today to keep it going.</span>
+            </div>
+          )}
+          
+          {/* Stats */}
+          <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/20">
+            <div>
+              <p className={`text-2xl font-bold ${currentStreak > 0 ? 'text-white' : 'text-gray-900'}`}>{longestStreak}</p>
+              <p className={`text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>Longest Streak</p>
+            </div>
+            <div>
+              <p className={`text-2xl font-bold ${currentStreak > 0 ? 'text-white' : 'text-gray-900'}`}>{activityDates.length}</p>
+              <p className={`text-xs ${currentStreak > 0 ? 'text-orange-200' : 'text-gray-500'}`}>Activity Days</p>
+            </div>
           </div>
-        )}
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 border-b border-gray-200">
-        <div className="p-4 text-center border-r border-gray-200">
-          <p className="text-2xl font-bold text-gray-900">{longestStreak}</p>
-          <p className="text-xs text-gray-500">Longest Streak</p>
         </div>
-        <div className="p-4 text-center">
-          <p className="text-2xl font-bold text-gray-900">{activityDates.length}</p>
-          <p className="text-xs text-gray-500">Total Activity Days</p>
+        
+        {/* Right: Calendar */}
+        <div className="flex-1 p-4 border-l border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
+              <Calendar size={16} className="text-gray-400" />
+              Activity Calendar
+            </h4>
+            <div className="flex items-center gap-3 text-xs">
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                <span className="text-gray-500">Weekday</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-orange-300"></div>
+                <span className="text-gray-500">Weekend</span>
+              </div>
+            </div>
+          </div>
+          
+          <ReactCalendar
+            tileContent={tileContent}
+            tileClassName={tileClassName}
+            maxDate={new Date()}
+            showNeighboringMonth={false}
+          />
+          
+          <p className="mt-3 text-xs text-gray-400 text-center">
+            Streak counts consecutive weekdays only (Mon-Fri)
+          </p>
         </div>
       </div>
 
       {/* Streak Milestones */}
-      <div className="p-6">
-        <h4 className="text-sm font-medium text-gray-700 mb-3">Streak Milestones (Weekdays Only)</h4>
-        <div className="flex gap-4">
+      <div className="p-4 border-t border-gray-200 bg-gray-50">
+        <h4 className="text-sm font-medium text-gray-700 mb-3">Streak Milestones</h4>
+        <div className="flex gap-3">
           <StreakMilestone days={5} current={currentStreak} multiplier="1.2x" />
           <StreakMilestone days={10} current={currentStreak} multiplier="1.5x" />
           <StreakMilestone days={20} current={currentStreak} multiplier="2x" />
           <StreakMilestone days={50} current={currentStreak} multiplier="🏆" />
         </div>
-        <p className="mt-3 text-xs text-gray-400">
-          Weekends (Sat/Sun) are not counted - streak continues on Monday!
-        </p>
       </div>
-
-      {/* Calendar Modal */}
-      {showCalendar && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCalendar(false)}>
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Flame className="text-orange-500" size={20} />
-                Activity Calendar
-              </h3>
-              <button onClick={() => setShowCalendar(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
-              </button>
-            </div>
-            
-            <div className="mb-4 flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                <span className="text-gray-600">Activity day</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded bg-gray-200"></div>
-                <span className="text-gray-600">Weekend</span>
-              </div>
-            </div>
-
-            <style>{`
-              .react-calendar {
-                width: 100%;
-                border: none;
-                font-family: inherit;
-              }
-              .react-calendar__tile {
-                padding: 0.75em 0.5em;
-              }
-              .react-calendar__tile.activity-day {
-                background: #fed7aa !important;
-                color: #c2410c;
-                font-weight: 600;
-              }
-              .react-calendar__tile.activity-day:hover {
-                background: #fdba74 !important;
-              }
-              .react-calendar__tile.weekend-day {
-                color: #9ca3af;
-              }
-              .react-calendar__tile--now {
-                background: #e5e7eb;
-              }
-              .react-calendar__tile--active {
-                background: #3b82f6 !important;
-                color: white !important;
-              }
-            `}</style>
-
-            <ReactCalendar
-              tileContent={tileContent}
-              tileClassName={tileClassName}
-              maxDate={new Date()}
-            />
-
-            <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-2 gap-4 text-center">
-              <div>
-                <p className="text-2xl font-bold text-orange-600">{currentStreak}</p>
-                <p className="text-xs text-gray-500">Current Streak</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-gray-700">{longestStreak}</p>
-                <p className="text-xs text-gray-500">Longest Streak</p>
-              </div>
-            </div>
-            
-            <p className="mt-3 text-xs text-gray-400 text-center">
-              Streak counts consecutive weekdays only (Mon-Fri)
-            </p>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -368,17 +338,17 @@ const StreakMilestone = ({ days, current, multiplier }) => {
   const progress = Math.min((current / days) * 100, 100);
   
   return (
-    <div className={`flex-1 rounded-lg p-3 text-center ${
-      isReached ? 'bg-orange-100 border-2 border-orange-400' : 'bg-gray-50'
+    <div className={`flex-1 rounded-lg p-2 text-center ${
+      isReached ? 'bg-orange-100 border border-orange-300' : 'bg-white border border-gray-200'
     }`}>
-      <p className={`text-lg font-bold ${isReached ? 'text-orange-600' : 'text-gray-400'}`}>
-        {days} days
+      <p className={`text-sm font-bold ${isReached ? 'text-orange-600' : 'text-gray-400'}`}>
+        {days}d
       </p>
       <p className={`text-xs ${isReached ? 'text-orange-500' : 'text-gray-400'}`}>
         {multiplier}
       </p>
       {!isReached && (
-        <div className="h-1 bg-gray-200 rounded-full mt-2 overflow-hidden">
+        <div className="h-1 bg-gray-100 rounded-full mt-1 overflow-hidden">
           <div 
             className="h-full bg-orange-400 transition-all"
             style={{ width: `${progress}%` }}
@@ -386,7 +356,7 @@ const StreakMilestone = ({ days, current, multiplier }) => {
         </div>
       )}
       {isReached && (
-        <span className="text-green-500 text-sm">✓</span>
+        <span className="text-green-500 text-xs">✓</span>
       )}
     </div>
   );
