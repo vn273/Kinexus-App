@@ -476,10 +476,10 @@ export const calculateWeekdayStreak = (leads) => {
     
     if (todayIsWeekday && todayHasActivityLogged) {
       streak++;
-      console.log('[DEBUG calculateWeekdayStreak] Today has activity, adding to streak');
     }
     
-    }
+    return streak;
+  } catch (err) {
     console.error('Error in calculateWeekdayStreak:', err);
     return 0;
   }
