@@ -49,6 +49,29 @@ const COLLECTIONS = {
   COMPANY_SCORES: 'companyScores'
 };
 
+// Helper to safely convert date values - handles timezone issues
+const toDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (typeof value === 'string') {
+    // If it's a date-only string (YYYY-MM-DD), parse as local time not UTC
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split('-').map(Number);
+      return new Date(year, month - 1, day);
+    }
+    // For ISO strings with time, extract date part and parse as local time
+    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+    return new Date(value);
+  }
+  if (typeof value === 'number') return new Date(value);
+  return null;
+};
+
 /**
  * Log a networking activity
  */
@@ -126,7 +149,7 @@ export const getRecentActivities24h = async (userId) => {
     return snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data(),
-      timestamp: doc.data().timestamp?.toDate?.() || new Date(doc.data().timestamp)
+      timestamp: toDate(doc.data().timestamp)
     }));
   } catch (error) {
     console.error('Error getting 24h activities:', error);
@@ -292,7 +315,7 @@ const calculateWeeksActive = (streakHistory) => {
   const weekSet = new Set();
   
   streakHistory.forEach(entry => {
-    const entryDate = new Date(entry.date);
+    const entryDate = toDate(entry.date) || new Date();
     const weekDiff = Math.floor((now - entryDate) / (1000 * 60 * 60 * 24 * 7));
     if (weekDiff < 12) {
       weekSet.add(weekDiff);
@@ -713,8 +736,8 @@ export const syncMonthlyGoalsFromLeads = async (userId, leads = [], customTarget
   // Helper to check if a date is in current month
   const isThisMonth = (dateValue) => {
     if (!dateValue) return false;
-    const date = dateValue?.toDate?.() || new Date(dateValue);
-    return date >= currentMonthStart && date < nextMonth;
+    const date = toDate(dateValue);
+    return date && date >= currentMonthStart && date < nextMonth;
   };
   
   // Count activities from leads this month
@@ -727,8 +750,8 @@ export const syncMonthlyGoalsFromLeads = async (userId, leads = [], customTarget
     if (status === 'Follow-up Needed') return true;
     // Also count if reachedOut but no response within 7+ days
     if (l.reachedOut && !l.response && isThisMonth(l.dateReachedOut)) {
-      const contactDate = l.dateReachedOut?.toDate?.() || new Date(l.dateReachedOut);
-      const daysSince = Math.floor((new Date() - contactDate) / (1000 * 60 * 60 * 24));
+      const contactDate = toDate(l.dateReachedOut);
+      const daysSince = contactDate ? Math.floor((new Date() - contactDate) / (1000 * 60 * 60 * 24)) : 0;
       return daysSince > 7;
     }
     return false;

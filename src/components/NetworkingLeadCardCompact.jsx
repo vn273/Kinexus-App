@@ -1,4 +1,6 @@
-import { Building2, MapPin, Calendar, CheckCircle, XCircle, Trash2, Phone, Mail, Clock, User } from 'lucide-react';
+import { Building2, MapPin, Calendar, CheckCircle, XCircle, Trash2, Phone, Mail, Clock, User, ChevronDown, ChevronUp, MessageCircle, RotateCcw } from 'lucide-react';
+import { useState } from 'react';
+import { parseDate, formatDateShort, formatDateWithYear } from '../utils/dateHelpers';
 
 const NetworkingLeadCardCompact = ({ 
   lead, 
@@ -9,9 +11,11 @@ const NetworkingLeadCardCompact = ({
   onMarkDead, 
   onEdit, 
   onDelete,
+  onRecordFollowUp,
   isSelected,
   onClick 
 }) => {
+  const [showFollowUps, setShowFollowUps] = useState(false);
   const getStatusColor = () => {
     const colors = {
       'Follow-up Needed': 'border-l-red-500 bg-gradient-to-r from-red-50/80 to-white',
@@ -36,7 +40,9 @@ const NetworkingLeadCardCompact = ({
   
   const getDaysSinceContact = () => {
     if (!lead.dateContacted) return null;
-    const days = Math.floor((new Date() - new Date(lead.dateContacted)) / (1000 * 60 * 60 * 24));
+    const contactDate = parseDate(lead.dateContacted);
+    if (!contactDate) return null;
+    const days = Math.floor((new Date() - contactDate) / (1000 * 60 * 60 * 24));
     if (days === 0) return 'today';
     if (days === 1) return 'yesterday';
     if (days < 7) return `${days}d ago`;
@@ -44,10 +50,31 @@ const NetworkingLeadCardCompact = ({
     return `${Math.floor(days / 30)}mo ago`;
   };
 
-  const formatDate = (date) => {
-    if (!date) return '—';
-    return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const formatFollowUpEntryDate = (entry) => {
+    if (!entry) return '—';
+    // Handle both Firestore Timestamp and Date objects/strings
+    const dateValue = entry.date?.toDate ? entry.date.toDate() : entry.date;
+    return formatDateWithYear(dateValue);
   };
+
+  // Check if follow-up date is past due
+  const isFollowUpPastDue = () => {
+    if (!lead.followUpDate) return false;
+    const followUpDate = parseDate(lead.followUpDate);
+    if (!followUpDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return followUpDate < today;
+  };
+
+  // Get follow-up history (handle both array of objects and legacy format)
+  const followUpHistory = (lead.followUpDates || []).map(entry => {
+    if (typeof entry === 'object' && entry.date) {
+      return entry;
+    }
+    // Legacy format: just a date
+    return { date: entry, notes: '' };
+  });
 
   const statusBadge = getStatusBadge();
   
@@ -107,7 +134,7 @@ const NetworkingLeadCardCompact = ({
               {/* Contact Date */}
               <div className="flex items-center gap-1 text-gray-600">
                 <Calendar size={12} />
-                <span>{formatDate(lead.dateContacted)}</span>
+                <span>{formatDateShort(lead.dateContacted)}</span>
                 {getDaysSinceContact() && (
                   <span className="text-gray-400">({getDaysSinceContact()})</span>
                 )}
@@ -117,8 +144,8 @@ const NetworkingLeadCardCompact = ({
               {lead.followUpDate && (
                 <div className="flex items-center gap-1">
                   <Clock size={12} className="text-blue-500" />
-                  <span className={new Date(lead.followUpDate) < new Date() ? 'text-red-600 font-medium' : 'text-blue-600'}>
-                    {formatDate(lead.followUpDate)}
+                  <span className={isFollowUpPastDue() ? 'text-red-600 font-medium' : 'text-blue-600'}>
+                    {formatDateShort(lead.followUpDate)}
                   </span>
                 </div>
               )}
@@ -219,6 +246,75 @@ const NetworkingLeadCardCompact = ({
             </button>
           </div>
         </div>
+      </div>
+      
+      {/* Follow-up Section */}
+      <div className="border-t border-gray-100" onClick={(e) => e.stopPropagation()}>
+        {/* Follow-up Header - Always visible */}
+        <div className="px-4 py-2 flex items-center justify-between bg-gray-50/50">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-sm text-gray-600">
+              <RotateCcw size={14} className="text-indigo-500" />
+              <span className="font-medium">Follow-ups:</span>
+              <span className={`px-1.5 py-0.5 rounded text-xs font-semibold ${
+                (lead.followUpCount || 0) > 0 
+                  ? 'bg-indigo-100 text-indigo-700' 
+                  : 'bg-gray-100 text-gray-500'
+              }`}>
+                {lead.followUpCount || 0}
+              </span>
+            </div>
+            {lead.lastFollowUpDate && (
+              <span className="text-xs text-gray-400">
+                Last: {formatDateShort(lead.lastFollowUpDate?.toDate ? lead.lastFollowUpDate.toDate() : lead.lastFollowUpDate)}
+              </span>
+            )}
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {lead.status !== 'Converted to Contact' && lead.status !== 'Dead Lead' && onRecordFollowUp && (
+              <button
+                onClick={() => onRecordFollowUp(lead)}
+                className="px-2 py-1 text-xs font-medium text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors flex items-center gap-1"
+              >
+                <MessageCircle size={12} />
+                Record
+              </button>
+            )}
+            {followUpHistory.length > 0 && (
+              <button
+                onClick={() => setShowFollowUps(!showFollowUps)}
+                className="p-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded transition-colors"
+                title={showFollowUps ? 'Hide history' : 'Show history'}
+              >
+                {showFollowUps ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+            )}
+          </div>
+        </div>
+        
+        {/* Follow-up History - Collapsible */}
+        {showFollowUps && followUpHistory.length > 0 && (
+          <div className="px-4 py-2 bg-indigo-50/30 border-t border-gray-100">
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {followUpHistory.slice().reverse().map((entry, index) => (
+                <div key={index} className="flex items-start gap-2 text-xs">
+                  <div className="flex-shrink-0 w-2 h-2 mt-1.5 rounded-full bg-indigo-400" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-gray-500">
+                      {formatFollowUpEntryDate(entry)}
+                    </div>
+                    {entry.notes && (
+                      <div className="text-gray-700 mt-0.5 break-words">
+                        {entry.notes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

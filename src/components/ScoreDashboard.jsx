@@ -106,6 +106,13 @@ const ScoreDashboard = ({ compact = false }) => {
                   </div>
                 </div>
                 <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-gray-600">Follow-ups</span>
+                  <div className="text-right">
+                    <span className="font-bold text-gray-900">{leadStats?.allTime?.followUps || 0}</span>
+                    <span className="text-gray-400 text-sm ml-2">× 3 pts = {(leadStats?.allTime?.followUps || 0) * 3}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
                   <span className="text-gray-600">Responses</span>
                   <div className="text-right">
                     <span className="font-bold text-gray-900">{leadStats?.allTime?.responses || 0}</span>

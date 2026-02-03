@@ -38,6 +38,18 @@ const isToday = (dateValue) => {
          date.getFullYear() === today.getFullYear();
 };
 
+// Helper to check if a date is in the future (after today)
+const isFutureDate = (dateValue) => {
+  if (!dateValue) return false;
+  const date = toDate(dateValue);
+  if (!date || isNaN(date.getTime())) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const compareDate = new Date(date);
+  compareDate.setHours(0, 0, 0, 0);
+  return compareDate > today;
+};
+
 // Helper to check if a lead was created today (check createdAt field)
 const isLeadCreatedToday = (lead) => {
   if (!lead.createdAt) return false;
@@ -62,12 +74,13 @@ const isThisMonth = (dateValue) => {
 
 /**
  * Point values for each activity type
- * Total Score = (reachedOut × 5) + (responses × 5) + (calls × 20)
+ * Total Score = (reachedOut × 5) + (responses × 5) + (calls × 20) + (followUps × 3)
  */
 export const LEAD_POINTS = {
   messagesSent: 5,      // Each reach out
   responses: 5,         // Each response received
   calls: 20,            // Each call scheduled
+  followUps: 3,         // Each follow-up recorded
 };
 
 /**
@@ -120,10 +133,20 @@ export const calculateLeadStats = (leads, period = 'all') => {
       if (period === 'today') {
         // Only count follow-ups recorded today (based on followUpDates array)
         const followUpDates = lead.followUpDates || [];
-        return total + followUpDates.filter(d => isToday(toDate(d))).length;
+        return total + followUpDates.filter(fu => {
+          // Handle { date, notes } object or just date value
+          const fuDate = fu && typeof fu === 'object' && fu.date ? fu.date : fu;
+          const parsed = toDate(fuDate);
+          return parsed && isToday(parsed);
+        }).length;
       } else if (period === 'month') {
         const followUpDates = lead.followUpDates || [];
-        return total + followUpDates.filter(d => isThisMonth(toDate(d))).length;
+        return total + followUpDates.filter(fu => {
+          // Handle { date, notes } object or just date value
+          const fuDate = fu && typeof fu === 'object' && fu.date ? fu.date : fu;
+          const parsed = toDate(fuDate);
+          return parsed && isThisMonth(parsed);
+        }).length;
       }
       return total + followUpCount;
     }, 0),
@@ -158,11 +181,12 @@ export const calculateLeadStats = (leads, period = 'all') => {
     leadsCount: leads.length
   };
 
-  // Calculate total points (simple summation: messages + responses + calls)
+  // Calculate total points (simple summation: messages + responses + calls + followUps)
   stats.totalPoints = 
     (stats.messagesSent * LEAD_POINTS.messagesSent) +
     (stats.responses * LEAD_POINTS.responses) +
-    (stats.calls * LEAD_POINTS.calls);
+    (stats.calls * LEAD_POINTS.calls) +
+    (stats.followUps * LEAD_POINTS.followUps);
 
   return stats;
 };
@@ -290,11 +314,21 @@ export const calculateActivityScoreFromLeads = (leads) => {
  * Get comprehensive stats for all periods
  */
 export const getAllLeadStats = (leads) => {
-  return {
-    today: calculateLeadStats(leads, 'today'),
-    month: calculateLeadStats(leads, 'month'),
-    allTime: calculateLeadStats(leads, 'all')
-  };
+  try {
+    const safeLeads = Array.isArray(leads) ? leads : [];
+    return {
+      today: calculateLeadStats(safeLeads, 'today'),
+      month: calculateLeadStats(safeLeads, 'month'),
+      allTime: calculateLeadStats(safeLeads, 'all')
+    };
+  } catch (err) {
+    console.error('Error in getAllLeadStats:', err);
+    return {
+      today: { messagesSent: 0, followUps: 0, responses: 0, calls: 0, totalPoints: 0, leadsCount: 0 },
+      month: { messagesSent: 0, followUps: 0, responses: 0, calls: 0, totalPoints: 0, leadsCount: 0 },
+      allTime: { messagesSent: 0, followUps: 0, responses: 0, calls: 0, totalPoints: 0, leadsCount: 0 }
+    };
+  }
 };
 
 /**
@@ -321,95 +355,134 @@ export const isWeekend = (date) => {
 /**
  * Get all activity dates from leads (dateReachedOut, dateContacted, responseDate, callDate, followUpDates)
  * This collects all dates where any activity happened on a lead
+ * IMPORTANT: Only count dates where the activity actually occurred (check boolean flags)
  */
 export const getActivityDatesFromLeads = (leads) => {
-  const dates = new Set();
-  
-  leads.forEach(lead => {
-    // Check dateReachedOut
-    if (lead.dateReachedOut) {
-      const d = toDate(lead.dateReachedOut);
-      if (d) dates.add(getDateKey(d));
-    }
-    // Also check dateContacted (some leads use this field)
-    if (lead.dateContacted) {
-      const d = toDate(lead.dateContacted);
-      if (d) dates.add(getDateKey(d));
-    }
-    // Check responseDate
-    if (lead.responseDate) {
-      const d = toDate(lead.responseDate);
-      if (d) dates.add(getDateKey(d));
-    }
-    // Check callDate and followUpDate (call dates are sometimes stored as followUpDate)
-    if (lead.callDate) {
-      const d = toDate(lead.callDate);
-      if (d) dates.add(getDateKey(d));
-    }
-    if (lead.followUpDate) {
-      const d = toDate(lead.followUpDate);
-      if (d) dates.add(getDateKey(d));
-    }
-    // Check follow-up dates array
-    if (lead.followUpDates && Array.isArray(lead.followUpDates)) {
-      lead.followUpDates.forEach(fuDate => {
-        const d = toDate(fuDate);
-        if (d) dates.add(getDateKey(d));
-      });
-    }
-    // Note: We intentionally do NOT include createdAt as an activity date
-    // Only actual networking activities count: reach out, response, call, follow-up
-  });
-  
-  return Array.from(dates).sort();
+  try {
+    if (!Array.isArray(leads)) return [];
+    
+    const dates = new Set();
+    
+    leads.forEach(lead => {
+      if (!lead) return;
+      
+      // Only count dateReachedOut/dateContacted if reachedOut is true
+      if (lead.reachedOut) {
+        const reachOutDate = lead.dateReachedOut || lead.dateContacted;
+        if (reachOutDate) {
+          const d = toDate(reachOutDate);
+          if (d && !isNaN(d.getTime())) dates.add(getDateKey(d));
+        }
+      }
+      
+      // Only count responseDate if response is true
+      if (lead.response && lead.responseDate) {
+        const d = toDate(lead.responseDate);
+        if (d && !isNaN(d.getTime())) dates.add(getDateKey(d));
+      }
+      
+      // Only count callDate if callScheduled is true
+      if (lead.callScheduled && lead.callDate) {
+        const d = toDate(lead.callDate);
+        if (d && !isNaN(d.getTime())) dates.add(getDateKey(d));
+      }
+      
+      // Check follow-up dates array (completed follow-ups) - these are always valid activities
+      if (lead.followUpDates && Array.isArray(lead.followUpDates)) {
+        lead.followUpDates.forEach(fu => {
+          // Follow-up can be an object { date, notes } or just a date string - add null check
+          if (!fu) return;
+          const fuDate = fu && typeof fu === 'object' && fu.date ? fu.date : fu;
+          const d = toDate(fuDate);
+          if (d && !isNaN(d.getTime())) dates.add(getDateKey(d));
+        });
+      }
+      // Note: We intentionally do NOT include createdAt as an activity date
+      // Note: We do NOT include followUpDate (scheduled) or lastFollowUpDate (redundant with followUpDates array)
+    });
+    
+    // Filter out future dates - only return dates up to and including today
+    const todayKey = getDateKey(new Date());
+    const filteredDates = Array.from(dates).filter(dateKey => dateKey <= todayKey);
+    
+    return filteredDates.sort();
+  } catch (err) {
+    console.error('Error in getActivityDatesFromLeads:', err);
+    return [];
+  }
 };
 
 /**
  * Calculate streak from activity dates
- * Weekdays require activity to continue streak; weekends are free passes that don't break it
- * but only count toward streak if they have activity
+ * ONLY WEEKDAYS COUNT toward the streak.
+ * Weekends are completely skipped - they don't break the streak and don't add to it.
  * 
  * Logic:
- * - Start from today, go backwards
- * - If weekday: must have activity to continue, otherwise streak breaks
- * - If weekend: doesn't break streak; adds +1 if there's activity on that weekend day
+ * - Start checking from yesterday, go backwards through WEEKDAYS ONLY
+ * - Skip all weekend days entirely
+ * - If a weekday has activity (marked orange), add +1 to streak
+ * - If a weekday has NO activity, streak breaks
+ * - AFTER calculating past streak, check if TODAY should be added:
+ *   - Today is ONLY added if today is a weekday AND today has activity logged (marked orange)
+ *   - If today has no activity, today is NOT counted
  */
 export const calculateWeekdayStreak = (leads) => {
-  const activityDates = new Set(getActivityDatesFromLeads(leads));
-  
-  let streak = 0;
-  let currentDate = new Date();
-  let checkedDays = 0;
-  const maxDaysToCheck = 365; // Safety limit
-  
-  while (checkedDays < maxDaysToCheck) {
-    const dateKey = getDateKey(currentDate);
-    const dayOfWeek = currentDate.getDay();
-    const isWeekendDay = dayOfWeek === 0 || dayOfWeek === 6;
-    const hasActivity = activityDates.has(dateKey);
+  try {
+    const activityDates = new Set(getActivityDatesFromLeads(leads));
     
-    if (!isWeekendDay) {
-      // Weekday - must have activity to continue streak
+    // First: Calculate streak from PAST days (yesterday and before)
+    let streak = 0;
+    let currentDate = new Date();
+    currentDate.setDate(currentDate.getDate() - 1); // Start from yesterday
+    let checkedDays = 0;
+    const maxDaysToCheck = 365; // Safety limit
+    
+    while (checkedDays < maxDaysToCheck) {
+      const dateKey = getDateKey(currentDate);
+      const dayOfWeek = currentDate.getDay();
+      const isWeekendDay = dayOfWeek === 0 || dayOfWeek === 6;
+      
+      if (isWeekendDay) {
+        // Skip weekends entirely - they don't affect streak
+        currentDate.setDate(currentDate.getDate() - 1);
+        checkedDays++;
+        continue;
+      }
+      
+      // It's a weekday - check for activity
+      const hasActivity = activityDates.has(dateKey);
+      
       if (hasActivity) {
         streak++;
       } else {
         // No activity on weekday - streak breaks
         break;
       }
-    } else {
-      // Weekend - free pass (doesn't break streak)
-      // Count toward streak only if there's activity
-      if (hasActivity) {
-        streak++;
-      }
+      
+      // Move to previous day
+      currentDate.setDate(currentDate.getDate() - 1);
+      checkedDays++;
     }
     
-    // Move to previous day
-    currentDate.setDate(currentDate.getDate() - 1);
-    checkedDays++;
+    // Second: Check if TODAY should be added to streak
+    // Today is ONLY added if:
+    // 1. Today is a weekday (not Saturday/Sunday)
+    // 2. Today has activity logged (is marked orange on calendar)
+    const today = new Date();
+    const todayKey = getDateKey(today);
+    const todayDayOfWeek = today.getDay();
+    const todayIsWeekday = todayDayOfWeek !== 0 && todayDayOfWeek !== 6;
+    const todayHasActivityLogged = activityDates.has(todayKey);
+    
+    if (todayIsWeekday && todayHasActivityLogged) {
+      streak++;
+      console.log('[DEBUG calculateWeekdayStreak] Today has activity, adding to streak');
+    }
+    
+    }
+    console.error('Error in calculateWeekdayStreak:', err);
+    return 0;
   }
-  
-  return streak;
 };
 
 /**
@@ -417,24 +490,50 @@ export const calculateWeekdayStreak = (leads) => {
  * Weekdays require activity; weekends are free passes but count if they have activity
  */
 export const calculateLongestStreak = (leads) => {
-  const activityDates = new Set(getActivityDatesFromLeads(leads));
-  if (activityDates.size === 0) return 0;
-  
-  const sortedDates = Array.from(activityDates).sort();
-  const firstDate = new Date(sortedDates[0]);
-  const lastDate = new Date(sortedDates[sortedDates.length - 1]);
-  
-  let longestStreak = 0;
-  let currentStreak = 0;
-  let currentDate = new Date(firstDate);
-  
-  while (currentDate <= lastDate) {
-    const dateKey = getDateKey(currentDate);
-    const isWeekendDay = currentDate.getDay() === 0 || currentDate.getDay() === 6;
-    const hasActivity = activityDates.has(dateKey);
+  try {
+    const activityDates = new Set(getActivityDatesFromLeads(leads));
+    if (activityDates.size === 0) return 0;
     
-    if (!isWeekendDay) {
-      // Weekday
+    const sortedDates = Array.from(activityDates).sort();
+    if (sortedDates.length === 0) return 0;
+    
+    // Parse dates safely - use our toDate helper to handle YYYY-MM-DD correctly
+    const firstDateStr = sortedDates[0];
+    const lastDateStr = sortedDates[sortedDates.length - 1];
+    
+    // Parse as local dates (YYYY-MM-DD format)
+    const [fy, fm, fd] = firstDateStr.split('-').map(Number);
+    const [ly, lm, ld] = lastDateStr.split('-').map(Number);
+    
+    const firstDate = new Date(fy, fm - 1, fd);
+    const lastDate = new Date(ly, lm - 1, ld);
+    
+    // Validate dates
+    if (isNaN(firstDate.getTime()) || isNaN(lastDate.getTime())) {
+      console.warn('Invalid dates in calculateLongestStreak:', firstDateStr, lastDateStr);
+      return 0;
+    }
+    
+    let longestStreak = 0;
+    let currentStreak = 0;
+    let currentDate = new Date(firstDate);
+    let iterations = 0;
+    const maxIterations = 3650; // ~10 years safety limit
+    
+    while (currentDate <= lastDate && iterations < maxIterations) {
+      const dateKey = getDateKey(currentDate);
+      const isWeekendDay = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+      
+      if (isWeekendDay) {
+        // Skip weekends entirely - they don't affect streak
+        currentDate.setDate(currentDate.getDate() + 1);
+        iterations++;
+        continue;
+      }
+      
+      // It's a weekday - check for activity
+      const hasActivity = activityDates.has(dateKey);
+      
       if (hasActivity) {
         currentStreak++;
         longestStreak = Math.max(longestStreak, currentStreak);
@@ -442,18 +541,122 @@ export const calculateLongestStreak = (leads) => {
         // Weekday without activity breaks streak
         currentStreak = 0;
       }
-    } else {
-      // Weekend - free pass (doesn't break streak)
-      // Count if there's activity
-      if (hasActivity) {
-        currentStreak++;
-        longestStreak = Math.max(longestStreak, currentStreak);
-      }
-      // No activity on weekend = free pass, streak continues
+      
+      currentDate.setDate(currentDate.getDate() + 1);
+      iterations++;
     }
     
-    currentDate.setDate(currentDate.getDate() + 1);
+    return longestStreak;
+  } catch (err) {
+    console.error('Error in calculateLongestStreak:', err);
+    return 0;
   }
-  
-  return longestStreak;
+};
+/**
+ * Get activity breakdown by date from leads
+ * Returns an object with date keys and activity details for each date
+ * This is used for calendar tooltips and calculating max daily points
+ */
+export const getActivityBreakdownByDate = (leads) => {
+  try {
+    if (!Array.isArray(leads)) return {};
+    
+    const breakdown = {};
+    
+    const addActivity = (dateKey, type) => {
+      if (!dateKey) return;
+      if (!breakdown[dateKey]) {
+        breakdown[dateKey] = { 
+          reachOuts: 0, 
+          followUps: 0, 
+          responses: 0, 
+          calls: 0, 
+          points: 0 
+        };
+      }
+      breakdown[dateKey][type]++;
+      
+      // Calculate points based on type
+      switch (type) {
+        case 'reachOuts':
+          breakdown[dateKey].points += LEAD_POINTS.messagesSent;
+          break;
+        case 'responses':
+          breakdown[dateKey].points += LEAD_POINTS.responses;
+          break;
+        case 'calls':
+          breakdown[dateKey].points += LEAD_POINTS.calls;
+          break;
+        case 'followUps':
+          breakdown[dateKey].points += LEAD_POINTS.followUps;
+          break;
+      }
+    };
+    
+    leads.forEach(lead => {
+      if (!lead) return;
+      
+      // Check dateReachedOut/dateContacted for reach outs
+      if (lead.reachedOut) {
+        const reachOutDate = lead.dateReachedOut || lead.dateContacted;
+        if (reachOutDate) {
+          const d = toDate(reachOutDate);
+          if (d && !isNaN(d.getTime())) addActivity(getDateKey(d), 'reachOuts');
+        }
+      }
+      
+      // Check responseDate
+      if (lead.response && lead.responseDate) {
+        const d = toDate(lead.responseDate);
+        if (d && !isNaN(d.getTime())) addActivity(getDateKey(d), 'responses');
+      }
+      
+      // Check callDate
+      if (lead.callScheduled && lead.callDate) {
+        const d = toDate(lead.callDate);
+        if (d && !isNaN(d.getTime())) addActivity(getDateKey(d), 'calls');
+      }
+      
+      // Check follow-up dates array (new feature)
+      if (lead.followUpDates && Array.isArray(lead.followUpDates)) {
+        lead.followUpDates.forEach(fu => {
+          // Follow-up can be an object { date, notes } or just a date string - add null check
+          if (!fu) return;
+          const fuDate = fu && typeof fu === 'object' && fu.date ? fu.date : fu;
+          const d = toDate(fuDate);
+          if (d && !isNaN(d.getTime())) addActivity(getDateKey(d), 'followUps');
+        });
+      }
+    });
+    
+    // Note: We intentionally keep future dates in breakdown for calendar display
+    // Streak calculations filter dates separately
+    return breakdown;
+  } catch (err) {
+    console.error('Error in getActivityBreakdownByDate:', err);
+    return {};
+  }
+};
+
+/**
+ * Get max daily activity points from all activity dates (excluding future dates)
+ * This is used for high score display
+ */
+export const getMaxDailyPoints = (leads) => {
+  try {
+    const breakdown = getActivityBreakdownByDate(leads);
+    if (!breakdown || typeof breakdown !== 'object') return 0;
+    
+    // Only consider dates up to and including today for high score
+    const todayKey = getDateKey(new Date());
+    const pastDatePoints = Object.entries(breakdown)
+      .filter(([dateKey]) => dateKey <= todayKey)
+      .map(([, day]) => day?.points || 0);
+    
+    if (pastDatePoints.length === 0) return 0;
+    return Math.max(...pastDatePoints);
+  } catch (err) {
+    console.error('Error in getMaxDailyPoints:', err);
+    return 0;
+  }
 };

@@ -1,4 +1,5 @@
 import { Building2, MapPin, Mail, Calendar, CheckCircle, XCircle, Clock, Trash2 } from 'lucide-react';
+import { parseDate, formatDateWithYear } from '../utils/dateHelpers';
 
 const NetworkingLeadCard = ({ lead, onFollowUp, onLogResponse, onScheduleCall, onConvert, onMarkDead, onEdit, onDelete }) => {
   const getStatusBadge = () => {
@@ -15,7 +16,9 @@ const NetworkingLeadCard = ({ lead, onFollowUp, onLogResponse, onScheduleCall, o
   
   const getDaysSinceContact = () => {
     if (!lead.dateContacted) return null;
-    const days = Math.floor((new Date() - new Date(lead.dateContacted)) / (1000 * 60 * 60 * 24));
+    const contactDate = parseDate(lead.dateContacted);
+    if (!contactDate) return null;
+    const days = Math.floor((new Date() - contactDate) / (1000 * 60 * 60 * 24));
     if (days === 0) return 'today';
     if (days === 1) return 'yesterday';
     if (days < 30) return `${days} days ago`;
@@ -25,17 +28,29 @@ const NetworkingLeadCard = ({ lead, onFollowUp, onLogResponse, onScheduleCall, o
   
   const getFollowUpText = () => {
     if (!lead.followUpDate) return null;
-    const followUpDate = new Date(lead.followUpDate);
+    const followUpDate = parseDate(lead.followUpDate);
+    if (!followUpDate) return null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    followUpDate.setHours(0, 0, 0, 0);
+    const followUpDateNormalized = new Date(followUpDate);
+    followUpDateNormalized.setHours(0, 0, 0, 0);
     
-    const diffDays = Math.floor((followUpDate - today) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor((followUpDateNormalized - today) / (1000 * 60 * 60 * 24));
     
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Tomorrow';
     if (diffDays < 0) return `${Math.abs(diffDays)} days overdue`;
-    return followUpDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return formatDateWithYear(lead.followUpDate);
+  };
+  
+  // Check if follow-up date is past due
+  const isFollowUpPastDue = () => {
+    if (!lead.followUpDate) return false;
+    const followUpDate = parseDate(lead.followUpDate);
+    if (!followUpDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return followUpDate < today;
   };
   
   return (
@@ -105,7 +120,7 @@ const NetworkingLeadCard = ({ lead, onFollowUp, onLogResponse, onScheduleCall, o
       <div className="flex items-center gap-1 text-xs text-gray-600 mb-3">
         <Calendar size={12} />
         <span>
-          Contacted: {lead.dateContacted ? new Date(lead.dateContacted).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not set'}
+          Contacted: {lead.dateContacted ? formatDateWithYear(lead.dateContacted) : 'Not set'}
         </span>
         {getDaysSinceContact() && (
           <span className="text-gray-500">({getDaysSinceContact()})</span>
@@ -118,7 +133,7 @@ const NetworkingLeadCard = ({ lead, onFollowUp, onLogResponse, onScheduleCall, o
           <Clock size={12} />
           <span className="text-gray-600">Follow up on: </span>
           <span className={`font-medium ${
-            lead.followUpDate < new Date() ? 'text-red-600' : 'text-blue-600'
+            isFollowUpPastDue() ? 'text-red-600' : 'text-blue-600'
           }`}>
             {getFollowUpText()}
           </span>

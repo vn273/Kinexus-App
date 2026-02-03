@@ -1,11 +1,35 @@
+// Parse date string safely - handles timezone issues by treating date-only strings as local time
+export const parseDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  // Handle Firestore Timestamp
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (typeof value === 'string') {
+    // If it's a date-only string (YYYY-MM-DD), parse as local time not UTC
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split('-').map(Number);
+      return new Date(year, month - 1, day); // month is 0-indexed
+    }
+    // For ISO strings with time, extract date part and parse as local time
+    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+    return new Date(value);
+  }
+  if (typeof value === 'number') return new Date(value);
+  return null;
+};
+
 // Calculate days since last contact
 export const daysSinceContact = (lastContactDate) => {
   if (!lastContactDate) return null;
 
   const now = new Date();
-  const lastContact = lastContactDate instanceof Date 
-    ? lastContactDate 
-    : new Date(lastContactDate);
+  const lastContact = parseDate(lastContactDate);
+  
+  if (!lastContact) return null;
   
   const diffTime = Math.abs(now - lastContact);
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -57,10 +81,10 @@ export const getContactStatusText = (lastContactDate) => {
 export const formatDate = (date) => {
   if (!date) return '';
   
-  const d = date instanceof Date ? date : new Date(date);
+  const d = parseDate(date);
   
   // Check if date is invalid
-  if (isNaN(d.getTime())) {
+  if (!d || isNaN(d.getTime())) {
     return 'Invalid Date';
   }
   
@@ -69,4 +93,30 @@ export const formatDate = (date) => {
     month: 'short',
     day: 'numeric'
   });
+};
+
+// Format date short (without year)
+export const formatDateShort = (date) => {
+  if (!date) return '—';
+  
+  const d = parseDate(date);
+  
+  if (!d || isNaN(d.getTime())) {
+    return '—';
+  }
+  
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+// Format date with year
+export const formatDateWithYear = (date) => {
+  if (!date) return '—';
+  
+  const d = parseDate(date);
+  
+  if (!d || isNaN(d.getTime())) {
+    return '—';
+  }
+  
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };

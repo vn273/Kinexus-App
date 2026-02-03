@@ -4,6 +4,7 @@ import {
   updateDoc,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   query,
   where,
@@ -15,11 +16,26 @@ import { db } from './firebase';
 const LEADS_COLLECTION = 'networkingLeads';
 
 // Helper to safely convert Firestore Timestamp or Date to Date object
+// Handles timezone issues by parsing date-only strings as local time
 const toDate = (value) => {
   if (!value) return null;
   if (value instanceof Date) return value;
   if (typeof value.toDate === 'function') return value.toDate();
-  if (typeof value === 'string' || typeof value === 'number') return new Date(value);
+  if (typeof value === 'string') {
+    // If it's a date-only string (YYYY-MM-DD), parse as local time not UTC
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split('-').map(Number);
+      return new Date(year, month - 1, day); // month is 0-indexed
+    }
+    // For ISO strings with time, extract date part and parse as local time
+    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+    return new Date(value);
+  }
+  if (typeof value === 'number') return new Date(value);
   return null;
 };
 
@@ -117,12 +133,24 @@ export const getNetworkingLeads = async (userId) => {
 // Add a new networking lead
 export const addNetworkingLead = async (userId, leadData) => {
   try {
-    const dateContacted = leadData.dateContacted 
-      ? Timestamp.fromDate(new Date(leadData.dateContacted))
+    const dateContactedParsed = toDate(leadData.dateContacted);
+    const dateContacted = dateContactedParsed 
+      ? Timestamp.fromDate(dateContactedParsed)
       : null;
     
-    const followUpDate = leadData.followUpDate
-      ? Timestamp.fromDate(new Date(leadData.followUpDate))
+    const followUpDateParsed = toDate(leadData.followUpDate);
+    const followUpDate = followUpDateParsed
+      ? Timestamp.fromDate(followUpDateParsed)
+      : null;
+    
+    const responseDateParsed = toDate(leadData.responseDate);
+    const responseDate = responseDateParsed
+      ? Timestamp.fromDate(responseDateParsed)
+      : null;
+    
+    const callDateParsed = toDate(leadData.callDate);
+    const callDate = callDateParsed
+      ? Timestamp.fromDate(callDateParsed)
       : null;
     
     const reminderDate = dateContacted 
@@ -131,7 +159,7 @@ export const addNetworkingLead = async (userId, leadData) => {
     
     const status = calculateStatus({
       ...leadData,
-      dateContacted: { toDate: () => new Date(leadData.dateContacted) }
+      dateContacted: dateContactedParsed ? { toDate: () => dateContactedParsed } : null
     });
     
     const docRef = await addDoc(collection(db, LEADS_COLLECTION), {
@@ -139,6 +167,8 @@ export const addNetworkingLead = async (userId, leadData) => {
       userId,
       dateContacted,
       followUpDate,
+      responseDate,
+      callDate,
       reminderDate,
       status,
       createdAt: serverTimestamp()
@@ -156,20 +186,33 @@ export const updateNetworkingLead = async (leadId, leadData) => {
   try {
     const updateData = { ...leadData };
     
-    // Convert dates to timestamps
+    // Convert dates to timestamps using timezone-safe parsing
     if (leadData.dateContacted) {
-      updateData.dateContacted = Timestamp.fromDate(new Date(leadData.dateContacted));
+      const dateContactedParsed = toDate(leadData.dateContacted);
+      updateData.dateContacted = Timestamp.fromDate(dateContactedParsed);
       updateData.reminderDate = calculateReminderDate(updateData.dateContacted);
     }
     
     if (leadData.followUpDate) {
-      updateData.followUpDate = Timestamp.fromDate(new Date(leadData.followUpDate));
+      const followUpDateParsed = toDate(leadData.followUpDate);
+      updateData.followUpDate = Timestamp.fromDate(followUpDateParsed);
+    }
+    
+    if (leadData.responseDate) {
+      const responseDateParsed = toDate(leadData.responseDate);
+      updateData.responseDate = Timestamp.fromDate(responseDateParsed);
+    }
+    
+    if (leadData.callDate) {
+      const callDateParsed = toDate(leadData.callDate);
+      updateData.callDate = Timestamp.fromDate(callDateParsed);
     }
     
     // Recalculate status
     const currentLead = { ...leadData };
     if (leadData.dateContacted) {
-      currentLead.dateContacted = { toDate: () => new Date(leadData.dateContacted) };
+      const dateContactedParsed = toDate(leadData.dateContacted);
+      currentLead.dateContacted = { toDate: () => dateContactedParsed };
     }
     updateData.status = calculateStatus(currentLead);
     
@@ -224,13 +267,42 @@ export const logResponse = async (leadId, notes = '') => {
 export const scheduleCall = async (leadId, callDate) => {
   try {
     const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    const callDateParsed = toDate(callDate);
     await updateDoc(leadRef, {
       callScheduled: true,
-      followUpDate: Timestamp.fromDate(new Date(callDate)),
+      callDate: Timestamp.fromDate(callDateParsed),
+      followUpDate: Timestamp.fromDate(callDateParsed),
       status: 'Call Scheduled'
     });
   } catch (error) {
     console.error('Error scheduling call:', error);
+    throw error;
+  }
+};
+
+// Record a follow-up on a lead
+export const recordFollowUp = async (leadId, notes = '') => {
+  try {
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    
+    // Get current lead data to append to followUpDates array
+    const leadSnap = await getDoc(leadRef);
+    const leadData = leadSnap.data();
+    const currentFollowUps = leadData?.followUpDates || [];
+    
+    // Create follow-up entry as object with date and notes
+    const followUpEntry = {
+      date: Timestamp.fromDate(new Date()),
+      notes: notes
+    };
+    
+    await updateDoc(leadRef, {
+      followUpDates: [...currentFollowUps, followUpEntry],
+      followUpCount: (leadData?.followUpCount || 0) + 1,
+      lastFollowUpDate: Timestamp.fromDate(new Date())
+    });
+  } catch (error) {
+    console.error('Error recording follow-up:', error);
     throw error;
   }
 };

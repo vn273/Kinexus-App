@@ -1,7 +1,8 @@
 import { 
   X, Building2, MapPin, Mail, Phone, Calendar, Clock, CheckCircle, XCircle, 
-  ExternalLink, User, FileText, Tag, Trash2 
+  ExternalLink, User, FileText, Tag, Trash2, RotateCcw, MessageCircle 
 } from 'lucide-react';
+import { parseDate, formatDateWithYear } from '../utils/dateHelpers';
 
 const LeadDetailPanel = ({ 
   lead, 
@@ -12,7 +13,8 @@ const LeadDetailPanel = ({
   onConvert, 
   onMarkDead, 
   onEdit, 
-  onDelete 
+  onDelete,
+  onRecordFollowUp 
 }) => {
   if (!lead) return null;
   
@@ -29,7 +31,9 @@ const LeadDetailPanel = ({
   
   const getDaysSinceContact = () => {
     if (!lead.dateContacted) return null;
-    const days = Math.floor((new Date() - new Date(lead.dateContacted)) / (1000 * 60 * 60 * 24));
+    const contactDate = parseDate(lead.dateContacted);
+    if (!contactDate) return null;
+    const days = Math.floor((new Date() - contactDate) / (1000 * 60 * 60 * 24));
     if (days === 0) return 'today';
     if (days === 1) return 'yesterday';
     if (days < 30) return `${days} days ago`;
@@ -39,18 +43,44 @@ const LeadDetailPanel = ({
   
   const getFollowUpText = () => {
     if (!lead.followUpDate) return null;
-    const followUpDate = new Date(lead.followUpDate);
+    const followUpDate = parseDate(lead.followUpDate);
+    if (!followUpDate) return null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    followUpDate.setHours(0, 0, 0, 0);
+    const followUpDateNormalized = new Date(followUpDate);
+    followUpDateNormalized.setHours(0, 0, 0, 0);
     
-    const diffDays = Math.floor((followUpDate - today) / (1000 * 60 * 60 * 24));
+    const diffDays = Math.floor((followUpDateNormalized - today) / (1000 * 60 * 60 * 24));
     
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Tomorrow';
     if (diffDays < 0) return `${Math.abs(diffDays)} days overdue`;
-    return followUpDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return formatDateWithYear(lead.followUpDate);
   };
+
+  // Check if follow-up date is past due
+  const isFollowUpPastDue = () => {
+    if (!lead.followUpDate) return false;
+    const followUpDate = parseDate(lead.followUpDate);
+    if (!followUpDate) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return followUpDate < today;
+  };
+
+  const formatFollowUpEntryDate = (entry) => {
+    if (!entry) return '—';
+    const dateValue = entry.date?.toDate ? entry.date.toDate() : entry.date;
+    return formatDateWithYear(dateValue);
+  };
+
+  // Get follow-up history
+  const followUpHistory = (lead.followUpDates || []).map(entry => {
+    if (typeof entry === 'object' && entry.date) {
+      return entry;
+    }
+    return { date: entry, notes: '' };
+  });
 
   return (
     <div className="h-full flex flex-col bg-white border-l border-gray-200">
@@ -155,9 +185,7 @@ const LeadDetailPanel = ({
                 <span className="text-gray-600">Contacted: </span>
                 <span className="font-medium text-gray-900">
                   {lead.dateContacted 
-                    ? new Date(lead.dateContacted).toLocaleDateString('en-US', { 
-                        month: 'long', day: 'numeric', year: 'numeric' 
-                      })
+                    ? formatDateWithYear(lead.dateContacted)
                     : 'Not set'}
                 </span>
                 {getDaysSinceContact() && (
@@ -169,12 +197,12 @@ const LeadDetailPanel = ({
             {lead.followUpDate && (
               <div className="flex items-center gap-3">
                 <Clock size={18} className={
-                  new Date(lead.followUpDate) < new Date() ? 'text-red-500' : 'text-blue-500'
+                  isFollowUpPastDue() ? 'text-red-500' : 'text-blue-500'
                 } />
                 <div>
                   <span className="text-gray-600">Follow up: </span>
                   <span className={`font-medium ${
-                    new Date(lead.followUpDate) < new Date() ? 'text-red-600' : 'text-blue-600'
+                    isFollowUpPastDue() ? 'text-red-600' : 'text-blue-600'
                   }`}>
                     {getFollowUpText()}
                   </span>
@@ -254,6 +282,56 @@ const LeadDetailPanel = ({
             </div>
           </section>
         )}
+        
+        {/* Follow-up History */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+              <RotateCcw size={14} />
+              Follow-up History
+              <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                (lead.followUpCount || 0) > 0 
+                  ? 'bg-indigo-100 text-indigo-700' 
+                  : 'bg-gray-100 text-gray-500'
+              }`}>
+                {lead.followUpCount || 0}
+              </span>
+            </h3>
+            {lead.status !== 'Converted to Contact' && lead.status !== 'Dead Lead' && onRecordFollowUp && (
+              <button
+                onClick={() => onRecordFollowUp(lead)}
+                className="px-3 py-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors flex items-center gap-1.5"
+              >
+                <MessageCircle size={14} />
+                Record Follow-up
+              </button>
+            )}
+          </div>
+          
+          {followUpHistory.length > 0 ? (
+            <div className="space-y-3 max-h-48 overflow-y-auto">
+              {followUpHistory.slice().reverse().map((entry, index) => (
+                <div key={index} className="flex items-start gap-3 p-3 bg-indigo-50/50 rounded-lg">
+                  <div className="flex-shrink-0 w-2 h-2 mt-2 rounded-full bg-indigo-400" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-gray-700">
+                      {formatFollowUpEntryDate(entry)}
+                    </div>
+                    {entry.notes && (
+                      <div className="text-sm text-gray-600 mt-1 break-words">
+                        {entry.notes}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-4 bg-gray-50 rounded-lg text-center text-gray-500 text-sm">
+              No follow-ups recorded yet
+            </div>
+          )}
+        </section>
       </div>
       
       {/* Actions Footer */}

@@ -22,6 +22,7 @@ import { useShiftSelect } from '../hooks/useShiftSelect';
 import * as networkingService from '../services/networkingLeadService';
 import * as importService from '../services/networkingImportService';
 import { findBatchDuplicates, findDuplicates } from '../services/duplicateService';
+import { formatDateWithYear } from '../utils/dateHelpers';
 
 const SORT_OPTIONS = [
   { value: 'name-asc', label: 'Name (A-Z)' },
@@ -42,18 +43,18 @@ const NetworkingTracker = () => {
   const { addContact, checkDuplicates, contacts } = useContacts();
   const { monthlyGoalTargets } = useSettings();
   const { 
-    score, 
-    streak, 
-    goals, 
-    tier, 
-    currentMultiplier,
+    score = { totalScore: 0, activityScore: 0, activityHighScore: 0 }, 
+    streak = { currentStreak: 0, longestStreak: 0, activityDates: [] }, 
+    goals = { targets: {}, progress: {} }, 
+    tier = { name: 'Starter', icon: '🌱' }, 
+    currentMultiplier = 1,
     logNetworkingActivity,
     refreshScores,
     syncGoalsFromLeads,
     loading: gamificationLoading,
-    scoresSyncedFromLeads,
-    leadStats
-  } = useGamification();
+    scoresSyncedFromLeads = false,
+    leadStats = { today: {}, month: {}, allTime: {} }
+  } = useGamification() || {};
   
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -123,11 +124,19 @@ const NetworkingTracker = () => {
     try {
       setLoading(true);
       const fetchedLeads = await networkingService.getNetworkingLeads(currentUser.uid);
-      setLeads(fetchedLeads);
-      setStatistics(networkingService.getLeadStatistics(fetchedLeads));
+      const safeLeads = Array.isArray(fetchedLeads) ? fetchedLeads : [];
+      setLeads(safeLeads);
+      setStatistics(networkingService.getLeadStatistics(safeLeads));
       
-      // Sync goals and scores from lead data
-      await syncGoalsFromLeads(fetchedLeads, monthlyGoalTargets);
+      // Sync goals and scores from lead data - wrap in try-catch to prevent crashes
+      try {
+        if (syncGoalsFromLeads) {
+          await syncGoalsFromLeads(safeLeads, monthlyGoalTargets);
+        }
+      } catch (syncError) {
+        console.error('Error syncing goals:', syncError);
+        // Continue without crashing
+      }
     } catch (error) {
       console.error('Error loading leads:', error);
       setLeads([]);
@@ -505,6 +514,30 @@ const NetworkingTracker = () => {
     }
   };
   
+  // Handler for recording a follow-up interaction (separate from status-based follow-up)
+  const handleRecordFollowUp = async (lead) => {
+    const notes = prompt('Follow-up notes (what did you discuss or message about?):');
+    if (notes === null) return; // User cancelled
+    
+    try {
+      await networkingService.recordFollowUp(lead.id, notes);
+      
+      // Log gamification activity
+      if (currentUser) {
+        await logNetworkingActivity('follow_up', {
+          leadId: lead.id,
+          leadName: `${lead.firstName} ${lead.lastName}`,
+          company: lead.firm
+        });
+      }
+      
+      await loadLeads();
+    } catch (error) {
+      console.error('Error recording follow-up:', error);
+      alert('Failed to record follow-up');
+    }
+  };
+  
   const handleLogResponse = async (lead) => {
     const notes = prompt('Response notes:');
     if (notes === null) return;
@@ -592,7 +625,7 @@ const NetworkingTracker = () => {
     if (lead.notes) {
       notesContent += `Notes: ${lead.notes}\n\n`;
     }
-    notesContent += `${conversionReason}.\nFirst contacted: ${lead.dateContacted ? new Date(lead.dateContacted).toLocaleDateString() : 'Unknown'}`;
+    notesContent += `${conversionReason}.\nFirst contacted: ${lead.dateContacted ? formatDateWithYear(lead.dateContacted) : 'Unknown'}`;
     
     return {
       firstName: lead.firstName,
@@ -1227,9 +1260,9 @@ const NetworkingTracker = () => {
                 </div>
                 <div className="text-2xl font-bold">{leadStats?.today?.totalPoints || 0}</div>
                 <div className="text-xs text-slate-400">
-                  {score?.activityHighScore > 0 && score?.activityHighScore > (leadStats?.today?.totalPoints || 0) 
+                  {score?.activityHighScore > 0 
                     ? `Best: ${score.activityHighScore} pts` 
-                    : (leadStats?.today?.totalPoints || 0) > 0 ? '🔥 New high!' : 'points today'}
+                    : 'points today'}
                 </div>
               </div>
             </div>
@@ -1332,6 +1365,7 @@ const NetworkingTracker = () => {
                                 onMarkDead={handleMarkDead}
                                 onEdit={handleEdit}
                                 onDelete={handleDelete}
+                                onRecordFollowUp={handleRecordFollowUp}
                               />
                             </div>
                           </div>
@@ -1358,6 +1392,7 @@ const NetworkingTracker = () => {
               onMarkDead={handleMarkDead}
               onEdit={handleEdit}
               onDelete={(lead) => { handleDelete(lead); setSelectedLead(null); }}
+              onRecordFollowUp={(lead) => { handleRecordFollowUp(lead); }}
             />
           </div>
         )}
@@ -1586,6 +1621,13 @@ const NetworkingTracker = () => {
                 <div className="text-right">
                   <span className="font-bold text-gray-900">{leadStats?.today?.messagesSent || 0}</span>
                   <span className="text-gray-400 text-sm ml-2">× 5 pts = {(leadStats?.today?.messagesSent || 0) * 5}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Follow-ups</span>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900">{leadStats?.today?.followUps || 0}</span>
+                  <span className="text-gray-400 text-sm ml-2">× 3 pts = {(leadStats?.today?.followUps || 0) * 3}</span>
                 </div>
               </div>
               <div className="flex justify-between items-center py-2 border-b border-gray-100">

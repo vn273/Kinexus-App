@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ContactProvider } from './contexts/ContactContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { GamificationProvider } from './contexts/GamificationContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import NetworkingTracker from './pages/NetworkingTracker';
@@ -21,8 +22,11 @@ const ProtectedRoute = ({ children }) => {
     );
   }
   
-  // Allow guest mode (no user but not loading)
-  // If you want to require login, change this to: if (!currentUser) return <Navigate to="/login" replace />;
+  // Require login - redirect to login page if not authenticated
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+  
   return children;
 };
 
@@ -55,42 +59,52 @@ function AppRoutes() {
       } />
       <Route path="/dashboard" element={
         <ProtectedRoute>
-          <Dashboard />
+          <ErrorBoundary>
+            <Dashboard />
+          </ErrorBoundary>
         </ProtectedRoute>
       } />
       <Route path="/networking" element={
         <ProtectedRoute>
-          <NetworkingTracker />
+          <ErrorBoundary>
+            <NetworkingTracker />
+          </ErrorBoundary>
         </ProtectedRoute>
       } />
       <Route path="/network-graph" element={
         <ProtectedRoute>
-          <NetworkGraphPage />
+          <ErrorBoundary>
+            <NetworkGraphPage />
+          </ErrorBoundary>
         </ProtectedRoute>
       } />
       <Route path="/settings" element={
         <ProtectedRoute>
-          <Settings />
+          <ErrorBoundary>
+            <Settings />
+          </ErrorBoundary>
         </ProtectedRoute>
       } />
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="/" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <SettingsProvider>
-        <ContactProvider>
-          <GamificationProvider>
-            <Router>
-              <AppRoutes />
-            </Router>
-          </GamificationProvider>
-        </ContactProvider>
-      </SettingsProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <SettingsProvider>
+          <ContactProvider>
+            <GamificationProvider>
+              <Router>
+                <AppRoutes />
+              </Router>
+            </GamificationProvider>
+          </ContactProvider>
+        </SettingsProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

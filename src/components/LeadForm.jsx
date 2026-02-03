@@ -1,41 +1,91 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Plus, Trash2, RotateCcw } from 'lucide-react';
+
+// Helper to parse date safely (handles timezone issues)
+const parseDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  // Handle Firestore Timestamp
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (typeof value === 'string') {
+    // If it's a date-only string (YYYY-MM-DD), parse as local time not UTC
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split('-').map(Number);
+      return new Date(year, month - 1, day); // month is 0-indexed
+    }
+    // For ISO strings with time, extract date part and parse as local time
+    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+    return new Date(value);
+  }
+  if (typeof value === 'number') return new Date(value);
+  return null;
+};
 
 // Helper to format date for input field (YYYY-MM-DD)
 const formatDateForInput = (date) => {
   if (!date) return '';
-  // Handle Firestore Timestamp or Date object
-  const d = date instanceof Date ? date : 
-            (date.toDate ? date.toDate() : new Date(date));
-  if (isNaN(d.getTime())) return '';
-  return d.toISOString().split('T')[0];
+  const d = parseDate(date);
+  if (!d || isNaN(d.getTime())) return '';
+  // Format as YYYY-MM-DD using local date parts
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+// Helper to format follow-up date for display
+const formatFollowUpDisplay = (entry) => {
+  if (!entry) return '';
+  const dateValue = entry.date || entry;
+  const d = parseDate(dateValue);
+  if (!d || isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 const LeadForm = ({ lead, onSubmit, onCancel }) => {
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    firm: '',
-    title: '',
-    divisionGroup: '',
-    commonalities: '',
-    location: '',
-    linkedInUrl: '',
-    email: '',
-    phone: '',
-    notes: '',
-    reachedOut: false,
-    dateContacted: '',
-    response: false,
-    responseDate: '',
-    callScheduled: false,
-    callDate: '',
-    ...lead,
-    // Ensure dates are properly formatted when editing
-    dateContacted: lead ? formatDateForInput(lead.dateContacted) : '',
-    responseDate: lead ? formatDateForInput(lead.responseDate) : '',
-    callDate: lead ? formatDateForInput(lead.callDate || lead.followUpDate) : '',
+  const [formData, setFormData] = useState(() => {
+    const defaults = {
+      firstName: '',
+      lastName: '',
+      firm: '',
+      title: '',
+      divisionGroup: '',
+      commonalities: '',
+      location: '',
+      linkedInUrl: '',
+      email: '',
+      phone: '',
+      notes: '',
+      reachedOut: false,
+      dateContacted: '',
+      response: false,
+      responseDate: '',
+      callScheduled: false,
+      callDate: '',
+    };
+    
+    if (lead) {
+      return {
+        ...defaults,
+        ...lead,
+        // Ensure dates are properly formatted when editing
+        dateContacted: formatDateForInput(lead.dateContacted),
+        responseDate: formatDateForInput(lead.responseDate),
+        callDate: formatDateForInput(lead.callDate || lead.followUpDate),
+      };
+    }
+    
+    return defaults;
   });
+
+  // Separate state for managing follow-ups list
+  const [followUpsList, setFollowUpsList] = useState([]);
+  const [newFollowUpDate, setNewFollowUpDate] = useState('');
+  const [newFollowUpNotes, setNewFollowUpNotes] = useState('');
 
   const [errors, setErrors] = useState({});
 
@@ -49,6 +99,18 @@ const LeadForm = ({ lead, onSubmit, onCancel }) => {
         responseDate: formatDateForInput(lead.responseDate),
         callDate: formatDateForInput(lead.callDate || lead.followUpDate),
       }));
+      
+      // Initialize follow-ups list from lead data
+      const existingFollowUps = (lead.followUpDates || []).map(entry => {
+        if (typeof entry === 'object' && entry.date) {
+          return {
+            date: formatDateForInput(entry.date),
+            notes: entry.notes || ''
+          };
+        }
+        return { date: formatDateForInput(entry), notes: '' };
+      });
+      setFollowUpsList(existingFollowUps);
     }
   }, [lead]);
 
@@ -63,6 +125,22 @@ const LeadForm = ({ lead, onSubmit, onCancel }) => {
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: null }));
     }
+  };
+
+  // Follow-up management handlers
+  const handleAddFollowUp = () => {
+    if (!newFollowUpDate) return;
+    
+    setFollowUpsList(prev => [...prev, {
+      date: newFollowUpDate,
+      notes: newFollowUpNotes
+    }]);
+    setNewFollowUpDate('');
+    setNewFollowUpNotes('');
+  };
+
+  const handleRemoveFollowUp = (index) => {
+    setFollowUpsList(prev => prev.filter((_, i) => i !== index));
   };
 
   const validate = () => {
@@ -107,7 +185,20 @@ const LeadForm = ({ lead, onSubmit, onCancel }) => {
       return;
     }
 
-    onSubmit(formData);
+    // Include follow-ups in the submitted data
+    const submitData = {
+      ...formData,
+      followUpDates: followUpsList.map(fu => ({
+        date: fu.date,
+        notes: fu.notes
+      })),
+      followUpCount: followUpsList.length,
+      lastFollowUpDate: followUpsList.length > 0 
+        ? followUpsList[followUpsList.length - 1].date 
+        : null
+    };
+
+    onSubmit(submitData);
   };
 
   return (
@@ -419,6 +510,92 @@ const LeadForm = ({ lead, onSubmit, onCancel }) => {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Follow-ups Section */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-2">
+              <RotateCcw size={16} className="text-indigo-500" />
+              Follow-up History
+              {followUpsList.length > 0 && (
+                <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-normal">
+                  {followUpsList.length}
+                </span>
+              )}
+            </h3>
+            
+            {/* Existing Follow-ups List */}
+            {followUpsList.length > 0 && (
+              <div className="space-y-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-3 bg-gray-50">
+                {followUpsList.map((fu, index) => (
+                  <div 
+                    key={index} 
+                    className="flex items-start gap-3 p-2 bg-white rounded-lg border border-gray-100"
+                  >
+                    <div className="flex-shrink-0 w-2 h-2 mt-2 rounded-full bg-indigo-400" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-700">
+                        {new Date(fu.date).toLocaleDateString('en-US', { 
+                          month: 'short', day: 'numeric', year: 'numeric' 
+                        })}
+                      </div>
+                      {fu.notes && (
+                        <div className="text-xs text-gray-500 mt-0.5 break-words">
+                          {fu.notes}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFollowUp(index)}
+                      className="flex-shrink-0 p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                      title="Remove follow-up"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add New Follow-up */}
+            <div className="border border-gray-200 rounded-lg p-3 bg-white">
+              <div className="text-sm font-medium text-gray-700 mb-2">Add Follow-up</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={newFollowUpDate}
+                    onChange={(e) => setNewFollowUpDate(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Notes (optional)</label>
+                  <input
+                    type="text"
+                    value={newFollowUpNotes}
+                    onChange={(e) => setNewFollowUpNotes(e.target.value)}
+                    placeholder="Brief note about this follow-up"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddFollowUp}
+                disabled={!newFollowUpDate}
+                className={`mt-3 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                  newFollowUpDate 
+                    ? 'text-indigo-600 bg-indigo-50 hover:bg-indigo-100' 
+                    : 'text-gray-400 bg-gray-100 cursor-not-allowed'
+                }`}
+              >
+                <Plus size={14} />
+                Add Follow-up
+              </button>
             </div>
           </div>
 

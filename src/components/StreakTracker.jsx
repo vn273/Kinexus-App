@@ -7,17 +7,20 @@ import 'react-calendar/dist/Calendar.css';
 const StreakTracker = ({ compact = false, variant = 'popup' }) => {
   const { streak, currentMultiplier, loading, leadStats, scoresSyncedFromLeads } = useGamification();
   const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedDateInfo, setSelectedDateInfo] = useState(null); // { dateKey, activity, position }
 
   // Only show real streak values after leads are synced to avoid stale cache showing wrong values
   const currentStreak = scoresSyncedFromLeads ? (streak?.currentStreak || 0) : 0;
   const longestStreak = scoresSyncedFromLeads ? (streak?.longestStreak || 0) : 0;
   const lastActivityDate = streak?.lastActivityDate;
   const activityDates = scoresSyncedFromLeads ? (streak?.activityDates || []) : [];
+  const activityBreakdown = scoresSyncedFromLeads ? (streak?.activityBreakdown || {}) : {};
 
-  // Convert activity dates to Set for quick lookup
+  // Convert activity dates to Set for quick lookup - use activityBreakdown keys
+  // This ensures dates are only highlighted if they have actual activity data
   const activityDateSet = useMemo(() => {
-    return new Set(activityDates);
-  }, [activityDates]);
+    return new Set(Object.keys(activityBreakdown));
+  }, [activityBreakdown]);
 
   // Check if streak is at risk (no activity today and last activity was yesterday)
   const isAtRisk = useMemo(() => {
@@ -40,7 +43,45 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
     return "Great start! Keep going!";
   };
 
-  // Custom tile content for calendar - show orange dot on activity days
+  // Build tooltip text for a given date
+  const getActivityTooltip = (dateKey) => {
+    const activity = activityBreakdown[dateKey];
+    if (!activity) return null;
+    
+    const parts = [];
+    if (activity.reachOuts > 0) parts.push(`${activity.reachOuts} reach out${activity.reachOuts > 1 ? 's' : ''}`);
+    if (activity.followUps > 0) parts.push(`${activity.followUps} follow-up${activity.followUps > 1 ? 's' : ''}`);
+    if (activity.responses > 0) parts.push(`${activity.responses} response${activity.responses > 1 ? 's' : ''}`);
+    if (activity.calls > 0) parts.push(`${activity.calls} call${activity.calls > 1 ? 's' : ''}`);
+    
+    return `${activity.points} pts: ${parts.join(', ')}`;
+  };
+
+  // Get structured activity info for popup display
+  const getActivityInfo = (dateKey) => {
+    const activity = activityBreakdown[dateKey];
+    if (!activity) return null;
+    return activity;
+  };
+
+  // Handle date click to show activity popup
+  const handleDateClick = (date, event) => {
+    const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const activity = getActivityInfo(dateKey);
+    
+    if (activity) {
+      // Get click position for positioning the popup (for inline variant)
+      const rect = event?.target?.getBoundingClientRect();
+      setSelectedDateInfo({
+        dateKey,
+        activity,
+        date: date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
+        position: rect ? { top: rect.top, left: rect.left + rect.width / 2 } : null
+      });
+    }
+  };
+
+  // Custom tile content for calendar - just show the dot, no hover tooltip
   const tileContent = ({ date, view }) => {
     if (view !== 'month') return null;
     
@@ -49,8 +90,8 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
     
     if (activityDateSet.has(dateKey)) {
       return (
-        <div className="flex justify-center mt-1">
-          <div className={`w-2 h-2 rounded-full ${isWeekend ? 'bg-orange-300' : 'bg-orange-500'}`}></div>
+        <div className="activity-tile-wrapper">
+          <div className={`w-2 h-2 rounded-full mx-auto mt-1 ${isWeekend ? 'bg-orange-300' : 'bg-orange-500'}`}></div>
         </div>
       );
     }
@@ -140,6 +181,10 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
       background: #3b82f6 !important;
       color: white !important;
     }
+    /* Activity tile wrapper */
+    .activity-tile-wrapper {
+      position: relative;
+    }
   `;
   
   // Popup-style calendar modal styles with dark text for navigation
@@ -213,6 +258,10 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
     .popup-calendar .react-calendar__tile--active {
       background: #3b82f6 !important;
       color: white !important;
+    }
+    /* Activity tile wrapper */
+    .popup-calendar .activity-tile-wrapper {
+      position: relative;
     }
   `;
 
@@ -296,9 +345,61 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
               <ReactCalendar
                 tileContent={tileContent}
                 tileClassName={tileClassName}
-                maxDate={new Date()}
                 showNeighboringMonth={false}
+                onClickDay={(date, event) => handleDateClick(date, event)}
               />
+
+              {/* Activity Detail Popup - Centered Modal */}
+              {selectedDateInfo && (
+                <div 
+                  className="fixed inset-0 bg-black/30 flex items-center justify-center z-[60]"
+                  onClick={() => setSelectedDateInfo(null)}
+                >
+                  <div 
+                    className="bg-white rounded-xl p-4 shadow-xl max-w-xs w-full mx-4"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-gray-900">{selectedDateInfo.date}</h4>
+                      <button 
+                        onClick={() => setSelectedDateInfo(null)}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                    <div className="text-2xl font-bold text-orange-600 mb-3">
+                      {selectedDateInfo.activity.points} points
+                    </div>
+                    <div className="space-y-2 text-sm text-gray-600">
+                      {selectedDateInfo.activity.reachOuts > 0 && (
+                        <div className="flex justify-between">
+                          <span>Reach Outs</span>
+                          <span className="font-medium text-gray-900">{selectedDateInfo.activity.reachOuts}</span>
+                        </div>
+                      )}
+                      {selectedDateInfo.activity.followUps > 0 && (
+                        <div className="flex justify-between">
+                          <span>Follow-ups</span>
+                          <span className="font-medium text-gray-900">{selectedDateInfo.activity.followUps}</span>
+                        </div>
+                      )}
+                      {selectedDateInfo.activity.responses > 0 && (
+                        <div className="flex justify-between">
+                          <span>Responses</span>
+                          <span className="font-medium text-gray-900">{selectedDateInfo.activity.responses}</span>
+                        </div>
+                      )}
+                      {selectedDateInfo.activity.calls > 0 && (
+                        <div className="flex justify-between">
+                          <span>Calls</span>
+                          <span className="font-medium text-gray-900">{selectedDateInfo.activity.calls}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-2 gap-4 text-center">
                 <div>
@@ -399,8 +500,65 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
     `;
     
     return (
-      <div className="bg-white rounded-xl overflow-hidden h-full flex">
+      <div className="bg-white rounded-xl overflow-visible h-full flex relative">
         <style>{inlineCalendarStyles}</style>
+        
+        {/* Activity Detail Popup - Modal centered over calendar */}
+        {selectedDateInfo && (
+          <>
+            {/* Backdrop - covers just this component area */}
+            <div 
+              className="absolute inset-0 bg-black/40 z-50 rounded-xl"
+              onClick={() => setSelectedDateInfo(null)}
+            />
+            {/* Popup centered in calendar area */}
+            <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+              <div 
+                className="bg-white rounded-xl p-4 shadow-xl max-w-[220px] w-full pointer-events-auto"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900 text-sm">{selectedDateInfo.date}</h4>
+                  <button 
+                    onClick={() => setSelectedDateInfo(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="text-2xl font-bold text-orange-600 mb-3">
+                  {selectedDateInfo.activity.points} points
+                </div>
+                <div className="space-y-2 text-sm text-gray-600">
+                  {selectedDateInfo.activity.reachOuts > 0 && (
+                    <div className="flex justify-between">
+                      <span>Reach Outs</span>
+                      <span className="font-medium text-gray-900">{selectedDateInfo.activity.reachOuts}</span>
+                    </div>
+                  )}
+                  {selectedDateInfo.activity.followUps > 0 && (
+                    <div className="flex justify-between">
+                      <span>Follow-ups</span>
+                      <span className="font-medium text-gray-900">{selectedDateInfo.activity.followUps}</span>
+                    </div>
+                  )}
+                  {selectedDateInfo.activity.responses > 0 && (
+                    <div className="flex justify-between">
+                      <span>Responses</span>
+                      <span className="font-medium text-gray-900">{selectedDateInfo.activity.responses}</span>
+                    </div>
+                  )}
+                  {selectedDateInfo.activity.calls > 0 && (
+                    <div className="flex justify-between">
+                      <span>Calls</span>
+                      <span className="font-medium text-gray-900">{selectedDateInfo.activity.calls}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
         
         {/* Left: Streak Info with orange border */}
         <div className={`w-1/3 p-4 flex flex-col justify-center border-2 border-orange-400 rounded-l-xl ${
@@ -431,7 +589,7 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
         </div>
         
         {/* Right: Compact Calendar with white border */}
-        <div className="flex-1 p-3 flex flex-col inline-calendar border-2 border-gray-200 border-l-0 rounded-r-xl">
+        <div className="flex-1 p-3 flex flex-col inline-calendar border-2 border-gray-200 border-l-0 rounded-r-xl relative">
           <div className="mb-1 flex items-center gap-2 text-xs">
             <div className="flex items-center gap-1">
               <div className="w-2 h-2 rounded-full bg-orange-500"></div>
@@ -447,10 +605,10 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
             <ReactCalendar
               tileContent={tileContent}
               tileClassName={tileClassName}
-              maxDate={new Date()}
               showNeighboringMonth={false}
               prev2Label={null}
               next2Label={null}
+              onClickDay={(date, event) => handleDateClick(date, event)}
             />
           </div>
         </div>
@@ -513,8 +671,60 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
               <ReactCalendar
                 tileContent={tileContent}
                 tileClassName={tileClassName}
-                maxDate={new Date()}
+                onClickDay={(date, event) => handleDateClick(date, event)}
               />
+
+              {/* Activity Detail Popup - Centered Modal */}
+              {selectedDateInfo && (
+                <div 
+                  className="fixed inset-0 bg-black/30 flex items-center justify-center z-[60]"
+                  onClick={() => setSelectedDateInfo(null)}
+                >
+                  <div 
+                    className="bg-white rounded-xl p-4 shadow-xl max-w-xs w-full mx-4"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-gray-900">{selectedDateInfo.date}</h4>
+                      <button 
+                        onClick={() => setSelectedDateInfo(null)}
+                        className="text-gray-400 hover:text-gray-600"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                    <div className="text-2xl font-bold text-orange-600 mb-3">
+                      {selectedDateInfo.activity.points} points
+                    </div>
+                    <div className="space-y-2 text-sm text-gray-600">
+                      {selectedDateInfo.activity.reachOuts > 0 && (
+                        <div className="flex justify-between">
+                          <span>Reach Outs</span>
+                          <span className="font-medium text-gray-900">{selectedDateInfo.activity.reachOuts}</span>
+                        </div>
+                      )}
+                      {selectedDateInfo.activity.followUps > 0 && (
+                        <div className="flex justify-between">
+                          <span>Follow-ups</span>
+                          <span className="font-medium text-gray-900">{selectedDateInfo.activity.followUps}</span>
+                        </div>
+                      )}
+                      {selectedDateInfo.activity.responses > 0 && (
+                        <div className="flex justify-between">
+                          <span>Responses</span>
+                          <span className="font-medium text-gray-900">{selectedDateInfo.activity.responses}</span>
+                        </div>
+                      )}
+                      {selectedDateInfo.activity.calls > 0 && (
+                        <div className="flex justify-between">
+                          <span>Calls</span>
+                          <span className="font-medium text-gray-900">{selectedDateInfo.activity.calls}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 pt-4 border-t border-gray-200 grid grid-cols-2 gap-4 text-center">
                 <div>
@@ -597,7 +807,7 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
         </div>
         
         {/* Right: Calendar */}
-        <div className="flex-1 p-4 border-l border-gray-200">
+        <div className="flex-1 p-4 border-l border-gray-200 relative">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-medium text-gray-700 flex items-center gap-2">
               <Calendar size={16} className="text-gray-400" />
@@ -618,9 +828,61 @@ const StreakTracker = ({ compact = false, variant = 'popup' }) => {
           <ReactCalendar
             tileContent={tileContent}
             tileClassName={tileClassName}
-            maxDate={new Date()}
             showNeighboringMonth={false}
+            onClickDay={(date, event) => handleDateClick(date, event)}
           />
+          
+          {/* Activity Detail Popup - Centered Modal */}
+          {selectedDateInfo && (
+            <div 
+              className="fixed inset-0 bg-black/30 flex items-center justify-center z-[60]"
+              onClick={() => setSelectedDateInfo(null)}
+            >
+              <div 
+                className="bg-white rounded-xl p-4 shadow-xl max-w-xs w-full mx-4"
+                onClick={e => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-semibold text-gray-900">{selectedDateInfo.date}</h4>
+                  <button 
+                    onClick={() => setSelectedDateInfo(null)}
+                    className="text-gray-400 hover:text-gray-600"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+                <div className="text-2xl font-bold text-orange-600 mb-3">
+                  {selectedDateInfo.activity.points} points
+                </div>
+                <div className="space-y-2 text-sm text-gray-600">
+                  {selectedDateInfo.activity.reachOuts > 0 && (
+                    <div className="flex justify-between">
+                      <span>Reach Outs</span>
+                      <span className="font-medium text-gray-900">{selectedDateInfo.activity.reachOuts}</span>
+                    </div>
+                  )}
+                  {selectedDateInfo.activity.followUps > 0 && (
+                    <div className="flex justify-between">
+                      <span>Follow-ups</span>
+                      <span className="font-medium text-gray-900">{selectedDateInfo.activity.followUps}</span>
+                    </div>
+                  )}
+                  {selectedDateInfo.activity.responses > 0 && (
+                    <div className="flex justify-between">
+                      <span>Responses</span>
+                      <span className="font-medium text-gray-900">{selectedDateInfo.activity.responses}</span>
+                    </div>
+                  )}
+                  {selectedDateInfo.activity.calls > 0 && (
+                    <div className="flex justify-between">
+                      <span>Calls</span>
+                      <span className="font-medium text-gray-900">{selectedDateInfo.activity.calls}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
           
           <p className="mt-3 text-xs text-gray-400 text-center">
             Streak counts consecutive weekdays only (Mon-Fri)

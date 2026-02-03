@@ -26,7 +26,9 @@ import {
   updateHighScoreFromHistory,
   calculateWeekdayStreak,
   calculateLongestStreak,
-  getActivityDatesFromLeads
+  getActivityDatesFromLeads,
+  getActivityBreakdownByDate,
+  getMaxDailyPoints
 } from '../services/leadStatsService';
 import {
   ACHIEVEMENTS,
@@ -202,12 +204,15 @@ export const GamificationProvider = ({ children }) => {
     if (!currentUser) return;
     
     try {
+      // Ensure leads is a valid array to prevent crashes
+      const safeLeads = Array.isArray(leads) ? leads : [];
+      
       // Calculate lead stats for all periods
-      const stats = getAllLeadStats(leads);
+      const stats = getAllLeadStats(safeLeads);
       setLeadStats(stats);
       
       // Store today's activity score in 7-day history
-      const todayScore = stats.today.totalPoints;
+      const todayScore = stats?.today?.totalPoints || 0;
       storeActivityScoreForDay(currentUser.uid, getTodayKey(), todayScore);
       
       // Get high score from 7-day rolling history
@@ -216,39 +221,62 @@ export const GamificationProvider = ({ children }) => {
         parseInt(localStorage.getItem(`activityHighScore_${currentUser.uid}`) || '0', 10)
       );
       
-      // Calculate weekday streak from lead dates
-      const currentStreak = calculateWeekdayStreak(leads);
-      const longestStreak = calculateLongestStreak(leads);
-      const activityDates = getActivityDatesFromLeads(leads);
+      // Calculate weekday streak from lead dates - wrap in try-catch for safety
+      let currentStreak = 0;
+      let longestStreak = 0;
+      let activityDates = [];
+      let activityBreakdown = {};
+      let maxDailyPoints = 0;
+      
+      try {
+        currentStreak = calculateWeekdayStreak(safeLeads);
+        longestStreak = calculateLongestStreak(safeLeads);
+        activityDates = getActivityDatesFromLeads(safeLeads);
+        activityBreakdown = getActivityBreakdownByDate(safeLeads);
+        maxDailyPoints = getMaxDailyPoints(safeLeads);
+      } catch (streakErr) {
+        console.error('Error calculating streaks:', streakErr);
+      }
       
       // Update streak state
       setStreak({
         currentStreak,
         longestStreak,
         lastActivityDate: activityDates.length > 0 ? activityDates[activityDates.length - 1] : null,
-        activityDates
+        activityDates,
+        activityBreakdown,
+        maxDailyPoints
       });
       
       // Update score based on lead stats
+      // Use maxDailyPoints as high score - this is the highest score from any day in the activity calendar
       setScore(prev => ({
         ...prev,
-        totalScore: stats.allTime.totalPoints,
+        totalScore: stats?.allTime?.totalPoints || 0,
         activityScore: todayScore,
-        activityHighScore: newHighScore
+        activityHighScore: maxDailyPoints
       }));
       
       // Mark that scores have been synced from leads
       setScoresSyncedFromLeads(true);
       
-      // Sync goals with lead data
-      const updatedGoals = await syncMonthlyGoalsFromLeads(currentUser.uid, leads, customTargets);
-      if (updatedGoals) {
-        setGoals(updatedGoals);
+      // Sync goals with lead data - wrap in try-catch
+      let updatedGoals = null;
+      try {
+        updatedGoals = await syncMonthlyGoalsFromLeads(currentUser.uid, safeLeads, customTargets);
+        if (updatedGoals) {
+          setGoals(updatedGoals);
+        }
+      } catch (goalsErr) {
+        console.error('Error syncing monthly goals:', goalsErr);
       }
+      
       return { goals: updatedGoals, stats, streak: { currentStreak, longestStreak } };
     } catch (err) {
       console.error('Error syncing goals from leads:', err);
-      throw err;
+      // Don't rethrow - just log and continue to prevent page crash
+      setScoresSyncedFromLeads(true); // Still mark as synced so UI shows data
+      return null;
     }
   }, [currentUser]);
 

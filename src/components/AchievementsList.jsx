@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
-import { Trophy, Lock, ChevronDown, ChevronUp, Search, X } from 'lucide-react';
+import { Trophy, Lock, ChevronDown, ChevronUp, Search, X, Star } from 'lucide-react';
 import useGamification from '../hooks/useGamification';
 import { ACHIEVEMENT_CATEGORIES } from '../services/achievementService';
+import { SCORE_TIERS, getTierForScore } from '../utils/scoreCalculations';
 
 const AchievementsList = ({ compact = false }) => {
   const { 
@@ -10,13 +11,18 @@ const AchievementsList = ({ compact = false }) => {
     achievementProgress,
     achievements,
     ACHIEVEMENTS,
-    loading 
+    loading,
+    score
   } = useGamification();
 
   const [showAllAchievements, setShowAllAchievements] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showLocked, setShowLocked] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Get current tier and total score
+  const totalScore = score?.totalScore || 0;
+  const currentTier = getTierForScore(totalScore);
 
   const allAchievements = useMemo(() => {
     return Object.values(ACHIEVEMENTS);
@@ -142,9 +148,64 @@ const AchievementsList = ({ compact = false }) => {
                 </button>
               </div>
               
-              {/* Achievements Grid */}
-              <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Scrollable Content - Level Progression + Achievements */}
+              <div className="overflow-y-auto max-h-[calc(80vh-80px)]">
+                {/* Level Progression Section */}
+                <div className="px-6 pt-5 pb-4 border-b border-gray-100 bg-gradient-to-b from-gray-50 to-white">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Star className="text-purple-500" size={18} />
+                    <h3 className="font-semibold text-gray-900">Level Progression</h3>
+                    <span className="text-sm text-gray-500 ml-auto">{totalScore} total pts</span>
+                  </div>
+                  <div className="space-y-2">
+                    {SCORE_TIERS.map((tier, index) => {
+                      const isCurrentTier = currentTier.name === tier.name;
+                      const isCompleted = totalScore > tier.max;
+                      const pointsDisplay = tier.max === Infinity ? `${tier.min}+` : `${tier.min} - ${tier.max}`;
+                      
+                      return (
+                        <div
+                          key={tier.name}
+                          className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
+                            isCurrentTier
+                              ? 'bg-purple-100 border-2 border-purple-400 shadow-sm'
+                              : isCompleted
+                              ? 'bg-green-50 border border-green-200'
+                              : 'bg-gray-50 border border-gray-200'
+                          }`}
+                        >
+                          <span className="text-xl w-8 text-center">{tier.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={`font-medium text-sm ${
+                                isCurrentTier ? 'text-purple-900' : isCompleted ? 'text-green-700' : 'text-gray-600'
+                              }`}>
+                                {tier.name}
+                              </span>
+                              {isCurrentTier && (
+                                <span className="text-xs bg-purple-500 text-white px-2 py-0.5 rounded-full">
+                                  Current
+                                </span>
+                              )}
+                              {isCompleted && (
+                                <span className="text-green-500 text-sm">✓</span>
+                              )}
+                            </div>
+                          </div>
+                          <span className={`text-xs font-medium ${
+                            isCurrentTier ? 'text-purple-700' : isCompleted ? 'text-green-600' : 'text-gray-500'
+                          }`}>
+                            {pointsDisplay} pts
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              
+                {/* Achievements Grid */}
+                <div className="p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {allAchievements
                     .sort((a, b) => {
                       const aUnlocked = unlockedIds.has(a.id);
@@ -210,6 +271,8 @@ const AchievementsList = ({ compact = false }) => {
                       );
                     })}
                 </div>
+              </div>
+              {/* End of scrollable content */}
               </div>
             </div>
           </div>
