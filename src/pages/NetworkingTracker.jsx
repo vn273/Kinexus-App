@@ -6,7 +6,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { 
   Upload, Download, Plus, TrendingUp, User, Search,
   Users, Phone, Clock, CheckCircle2, ChevronDown, ChevronRight,
-  ArrowUpDown, CheckSquare, Square, Trash2, Calendar, Share2, Settings, Trophy, Flame, Target
+  ArrowUpDown, CheckSquare, Square, Trash2, Calendar, Share2, Settings, Trophy, Flame, Target, X
 } from 'lucide-react';
 import NetworkingLeadCardCompact from '../components/NetworkingLeadCardCompact';
 import LeadDetailPanel from '../components/LeadDetailPanel';
@@ -51,7 +51,8 @@ const NetworkingTracker = () => {
     refreshScores,
     syncGoalsFromLeads,
     loading: gamificationLoading,
-    scoresSyncedFromLeads
+    scoresSyncedFromLeads,
+    leadStats
   } = useGamification();
   
   const [leads, setLeads] = useState([]);
@@ -68,6 +69,10 @@ const NetworkingTracker = () => {
   });
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [editingLead, setEditingLead] = useState(null);
+  
+  // Popup states for score breakdowns
+  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false);
+  const [showTodayBreakdown, setShowTodayBreakdown] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Multi-select state
@@ -1144,14 +1149,17 @@ const NetworkingTracker = () => {
             
             {/* Quick Stats Row */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              {/* Current Score */}
-              <div className="bg-white/10 backdrop-blur p-4 rounded-xl">
+              {/* Current Score - Clickable with popup */}
+              <div 
+                className="bg-white/10 backdrop-blur p-4 rounded-xl cursor-pointer hover:bg-white/20 transition-colors"
+                onClick={() => setShowScoreBreakdown(true)}
+              >
                 <div className="flex items-center gap-2 mb-1">
                   <Trophy size={16} className="text-yellow-400" />
                   <span className="text-sm text-slate-300">Total Score</span>
                 </div>
                 <div className="text-2xl font-bold">
-                  {scoresSyncedFromLeads ? (score?.totalScore || 0).toLocaleString() : '—'}
+                  {scoresSyncedFromLeads ? (leadStats?.allTime?.totalPoints || 0).toLocaleString() : '—'}
                 </div>
                 <div className="text-xs text-slate-400">{tier?.icon} {tier?.name}</div>
               </div>
@@ -1168,37 +1176,60 @@ const NetworkingTracker = () => {
                 </div>
               </div>
               
-              {/* Monthly Goal Progress */}
+              {/* Monthly Goal Progress - Use leadStats.month for consistency */}
               <Link to="/settings" className="bg-white/10 backdrop-blur p-4 rounded-xl hover:bg-white/20 transition-colors block">
                 <div className="flex items-center gap-2 mb-1">
                   <Target size={16} className="text-green-400" />
                   <span className="text-sm text-slate-300">Monthly Goals</span>
                 </div>
                 <div className="text-2xl font-bold">
-                  {goals?.progress && goals?.targets ? Math.round(
-                    ['coldEmails', 'followUps', 'responses', 'calls'].reduce((sum, key) => {
-                      const target = goals.targets[key] || 1;
-                      const current = goals.progress[key] || 0;
-                      return sum + Math.min((current / target) * 100, 100) * 0.25;
-                    }, 0)
-                  ) : 0}%
+                  {(() => {
+                    const monthStats = leadStats?.month || {};
+                    const targets = goals?.targets || { coldEmails: 20, followUps: 15, responses: 10, calls: 10 };
+                    const progress = {
+                      coldEmails: monthStats.messagesSent || 0,
+                      followUps: monthStats.followUps || 0,
+                      responses: monthStats.responses || 0,
+                      calls: monthStats.calls || 0
+                    };
+                    return Math.round(
+                      ['coldEmails', 'followUps', 'responses', 'calls'].reduce((sum, key) => {
+                        const target = targets[key] || 1;
+                        const current = progress[key] || 0;
+                        return sum + Math.min((current / target) * 100, 100) * 0.25;
+                      }, 0)
+                    );
+                  })()}%
                 </div>
                 <div className="text-xs text-slate-400">
-                  {goals?.targets ? `${['coldEmails', 'followUps', 'responses', 'calls'].filter(k => (goals.progress?.[k] || 0) >= (goals.targets[k] || 1)).length}/4 completed` : 'Set goals to track →'}
+                  {goals?.targets ? `${(() => {
+                    const monthStats = leadStats?.month || {};
+                    const targets = goals?.targets || { coldEmails: 20, followUps: 15, responses: 10, calls: 10 };
+                    const progress = {
+                      coldEmails: monthStats.messagesSent || 0,
+                      followUps: monthStats.followUps || 0,
+                      responses: monthStats.responses || 0,
+                      calls: monthStats.calls || 0
+                    };
+                    return ['coldEmails', 'followUps', 'responses', 'calls'].filter(k => progress[k] >= (targets[k] || 1)).length;
+                  })()}/4 completed` : 'Set goals to track →'}
                 </div>
               </Link>
               
-              {/* Activity Score Today */}
-              <div className="bg-white/10 backdrop-blur p-4 rounded-xl">
+              {/* Activity Score Today - Clickable with popup */}
+              <div 
+                className="bg-white/10 backdrop-blur p-4 rounded-xl cursor-pointer hover:bg-white/20 transition-colors"
+                onClick={() => setShowTodayBreakdown(true)}
+              >
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp size={16} className="text-blue-400" />
                   <span className="text-sm text-slate-300">Today's Activity</span>
                 </div>
-                <div className="text-2xl font-bold">{score?.activityScore || 0}</div>
+                <div className="text-2xl font-bold">{leadStats?.today?.totalPoints || 0}</div>
                 <div className="text-xs text-slate-400">
-                  {score?.activityHighScore > 0 && score?.activityHighScore > (score?.activityScore || 0) 
+                  {score?.activityHighScore > 0 && score?.activityHighScore > (leadStats?.today?.totalPoints || 0) 
                     ? `Best: ${score.activityHighScore} pts` 
-                    : score?.activityScore > 0 ? '🔥 New high!' : 'points today'}
+                    : (leadStats?.today?.totalPoints || 0) > 0 ? '🔥 New high!' : 'points today'}
                 </div>
               </div>
             </div>
@@ -1489,6 +1520,96 @@ const NetworkingTracker = () => {
       
       {/* AI Assistant for Leads */}
       <AIAssistant dataSource="leads" data={leads} />
+      
+      {/* Total Score Breakdown Popup */}
+      {showScoreBreakdown && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowScoreBreakdown(false)}>
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Trophy className="text-yellow-500" size={24} />
+                <h3 className="text-lg font-bold text-gray-900">Total Score Breakdown</h3>
+              </div>
+              <button onClick={() => setShowScoreBreakdown(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Reach Outs</span>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900">{leadStats?.allTime?.messagesSent || 0}</span>
+                  <span className="text-gray-400 text-sm ml-2">× 5 pts = {(leadStats?.allTime?.messagesSent || 0) * 5}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Responses</span>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900">{leadStats?.allTime?.responses || 0}</span>
+                  <span className="text-gray-400 text-sm ml-2">× 5 pts = {(leadStats?.allTime?.responses || 0) * 5}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Calls Scheduled</span>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900">{leadStats?.allTime?.calls || 0}</span>
+                  <span className="text-gray-400 text-sm ml-2">× 20 pts = {(leadStats?.allTime?.calls || 0) * 20}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center py-3 bg-yellow-50 rounded-lg px-3 -mx-3">
+                <span className="font-semibold text-gray-900">Total Score</span>
+                <span className="text-xl font-bold text-yellow-600">{leadStats?.allTime?.totalPoints || 0}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Today's Activity Breakdown Popup */}
+      {showTodayBreakdown && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowTodayBreakdown(false)}>
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="text-blue-500" size={24} />
+                <h3 className="text-lg font-bold text-gray-900">Today's Activity</h3>
+              </div>
+              <button onClick={() => setShowTodayBreakdown(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Reach Outs</span>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900">{leadStats?.today?.messagesSent || 0}</span>
+                  <span className="text-gray-400 text-sm ml-2">× 5 pts = {(leadStats?.today?.messagesSent || 0) * 5}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Responses</span>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900">{leadStats?.today?.responses || 0}</span>
+                  <span className="text-gray-400 text-sm ml-2">× 5 pts = {(leadStats?.today?.responses || 0) * 5}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Calls Scheduled</span>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900">{leadStats?.today?.calls || 0}</span>
+                  <span className="text-gray-400 text-sm ml-2">× 20 pts = {(leadStats?.today?.calls || 0) * 20}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center py-3 bg-blue-50 rounded-lg px-3 -mx-3">
+                <span className="font-semibold text-gray-900">Today's Points</span>
+                <span className="text-xl font-bold text-blue-600">{leadStats?.today?.totalPoints || 0}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

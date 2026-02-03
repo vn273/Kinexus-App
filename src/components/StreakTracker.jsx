@@ -5,22 +5,18 @@ import useGamification from '../hooks/useGamification';
 import 'react-calendar/dist/Calendar.css';
 
 const StreakTracker = ({ compact = false, variant = 'popup' }) => {
-  const { streak, currentMultiplier, loading, leadStats } = useGamification();
+  const { streak, currentMultiplier, loading, leadStats, scoresSyncedFromLeads } = useGamification();
   const [showCalendar, setShowCalendar] = useState(false);
 
-  const currentStreak = streak?.currentStreak || 0;
-  const longestStreak = streak?.longestStreak || 0;
+  // Only show real streak values after leads are synced to avoid stale cache showing wrong values
+  const currentStreak = scoresSyncedFromLeads ? (streak?.currentStreak || 0) : 0;
+  const longestStreak = scoresSyncedFromLeads ? (streak?.longestStreak || 0) : 0;
   const lastActivityDate = streak?.lastActivityDate;
-  const activityDates = streak?.activityDates || [];
-
-  // Debug: Log activity dates
-  console.log('StreakTracker activityDates:', activityDates);
+  const activityDates = scoresSyncedFromLeads ? (streak?.activityDates || []) : [];
 
   // Convert activity dates to Set for quick lookup
   const activityDateSet = useMemo(() => {
-    const set = new Set(activityDates);
-    console.log('Activity date set:', Array.from(set));
-    return set;
+    return new Set(activityDates);
   }, [activityDates]);
 
   // Check if streak is at risk (no activity today and last activity was yesterday)

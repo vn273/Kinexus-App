@@ -3,10 +3,35 @@
  * Backend service to calculate totals from leads for different time periods
  */
 
+// Helper to safely convert date values - FIXED for timezone issues
+const toDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value.toDate === 'function') return value.toDate();
+  if (typeof value === 'string') {
+    // If it's a date-only string (YYYY-MM-DD), parse as local time not UTC
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split('-').map(Number);
+      return new Date(year, month - 1, day); // month is 0-indexed
+    }
+    // For ISO strings with time (e.g., "2026-02-02T00:00:00.000Z"), extract date part
+    // and parse as local time to avoid timezone shift issues
+    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})T/);
+    if (isoMatch) {
+      const [, year, month, day] = isoMatch;
+      return new Date(Number(year), Number(month) - 1, Number(day));
+    }
+    return new Date(value);
+  }
+  if (typeof value === 'number') return new Date(value);
+  return null;
+};
+
 // Helper to check if a date is today
 const isToday = (dateValue) => {
   if (!dateValue) return false;
-  const date = dateValue?.toDate?.() || new Date(dateValue);
+  const date = toDate(dateValue);
+  if (!date) return false;
   const today = new Date();
   return date.getDate() === today.getDate() &&
          date.getMonth() === today.getMonth() &&
@@ -28,19 +53,11 @@ const isLeadCreatedThisMonth = (lead) => {
 // Helper to check if a date is in the current month
 const isThisMonth = (dateValue) => {
   if (!dateValue) return false;
-  const date = dateValue?.toDate?.() || new Date(dateValue);
+  const date = toDate(dateValue);
+  if (!date) return false;
   const now = new Date();
   return date.getMonth() === now.getMonth() &&
          date.getFullYear() === now.getFullYear();
-};
-
-// Helper to safely convert date values
-const toDate = (value) => {
-  if (!value) return null;
-  if (value instanceof Date) return value;
-  if (typeof value.toDate === 'function') return value.toDate();
-  if (typeof value === 'string' || typeof value === 'number') return new Date(value);
-  return null;
 };
 
 /**
@@ -83,42 +100,59 @@ export const calculateLeadStats = (leads, period = 'all') => {
       return true;
     }).length,
 
-    // Messages sent = leads where reachedOut is true
+    // Messages sent = leads where reachedOut is true AND (dateReachedOut matches period OR lead created in period)
     messagesSent: leads.filter(lead => {
+      if (!lead.reachedOut) return false;
       if (period === 'today') {
-        // Count if reached out today OR if the lead was created today with reachedOut
-        return lead.reachedOut && (isToday(toDate(lead.dateReachedOut)) || (isLeadCreatedToday(lead) && lead.reachedOut));
+        const reachedOutDate = toDate(lead.dateReachedOut);
+        // Count if dateReachedOut is today OR lead was created today (and has reachedOut)
+        return (reachedOutDate && isToday(reachedOutDate)) || isLeadCreatedToday(lead);
       } else if (period === 'month') {
-        return lead.reachedOut && (isThisMonth(toDate(lead.dateReachedOut)) || (isLeadCreatedThisMonth(lead) && lead.reachedOut));
+        const reachedOutDate = toDate(lead.dateReachedOut);
+        return (reachedOutDate && isThisMonth(reachedOutDate)) || isLeadCreatedThisMonth(lead);
       }
-      return lead.reachedOut;
+      return true; // all time
     }).length,
 
-    // Follow ups = leads with status 'Follow-up Needed'
-    followUps: leads.filter(lead => {
-      const status = lead.status || calculateLeadStatus(lead);
-      return status === 'Follow-up Needed';
-    }).length,
+    // Follow ups = leads with followUpCount field (will add this)
+    followUps: leads.reduce((total, lead) => {
+      const followUpCount = lead.followUpCount || 0;
+      if (period === 'today') {
+        // Only count follow-ups recorded today (based on followUpDates array)
+        const followUpDates = lead.followUpDates || [];
+        return total + followUpDates.filter(d => isToday(toDate(d))).length;
+      } else if (period === 'month') {
+        const followUpDates = lead.followUpDates || [];
+        return total + followUpDates.filter(d => isThisMonth(toDate(d))).length;
+      }
+      return total + followUpCount;
+    }, 0),
 
-    // Responses = leads where response is true
+    // Responses = leads where response is true AND (responseDate matches period OR lead created in period)
     responses: leads.filter(lead => {
+      if (!lead.response) return false;
       if (period === 'today') {
-        return lead.response && (isToday(toDate(lead.responseDate)) || isLeadCreatedToday(lead));
+        const respDate = toDate(lead.responseDate);
+        // Count if responseDate is today OR lead was created today (and has response)
+        return (respDate && isToday(respDate)) || isLeadCreatedToday(lead);
       } else if (period === 'month') {
-        return lead.response && (isThisMonth(toDate(lead.responseDate)) || isLeadCreatedThisMonth(lead));
+        const respDate = toDate(lead.responseDate);
+        return (respDate && isThisMonth(respDate)) || isLeadCreatedThisMonth(lead);
       }
-      return lead.response;
+      return true; // all time
     }).length,
 
-    // Calls = leads where callScheduled is true AND call date is today
+    // Calls = leads where callScheduled is true AND callDate matches period
     calls: leads.filter(lead => {
+      if (!lead.callScheduled) return false;
       if (period === 'today') {
-        // Call scheduled for today
-        return lead.callScheduled && isToday(toDate(lead.callDate));
+        const callDt = toDate(lead.callDate);
+        return callDt && isToday(callDt);
       } else if (period === 'month') {
-        return lead.callScheduled && isThisMonth(toDate(lead.callDate));
+        const callDt = toDate(lead.callDate);
+        return callDt && isThisMonth(callDt);
       }
-      return lead.callScheduled;
+      return true; // all time
     }).length,
 
     leadsCount: leads.length
@@ -190,14 +224,29 @@ export const getHighScoreFrom7DayHistory = (userId) => {
 
 /**
  * Update high score if any day in the 7-day history exceeds it
+ * Also recalculates high score from current history (handles deletions)
  */
 export const updateHighScoreFromHistory = (userId, currentHighScore) => {
   const historyMax = getHighScoreFrom7DayHistory(userId);
-  const newHighScore = Math.max(currentHighScore, historyMax);
+  // Always use the max from history - this handles deletions properly
+  const newHighScore = historyMax;
   
-  if (newHighScore > currentHighScore) {
-    localStorage.setItem(`activityHighScore_${userId}`, String(newHighScore));
-  }
+  localStorage.setItem(`activityHighScore_${userId}`, String(newHighScore));
+  
+  return newHighScore;
+};
+
+/**
+ * Recalculate and store today's score in history, then get new high score
+ * Call this after any lead changes (add, edit, delete)
+ */
+export const recalculateTodaysScore = (userId, todayScore) => {
+  const todayKey = getTodayKey();
+  storeActivityScoreForDay(userId, todayKey, todayScore);
+  
+  // Recalculate high score from updated history
+  const newHighScore = getHighScoreFrom7DayHistory(userId);
+  localStorage.setItem(`activityHighScore_${userId}`, String(newHighScore));
   
   return newHighScore;
 };
@@ -270,32 +319,95 @@ export const isWeekend = (date) => {
 };
 
 /**
- * Get all activity dates from leads (dateReachedOut, responseDate, callDate)
+ * Get all activity dates from leads (dateReachedOut, dateContacted, responseDate, callDate, followUpDates)
+ * This collects all dates where any activity happened on a lead
  */
 export const getActivityDatesFromLeads = (leads) => {
   const dates = new Set();
+  const debugInfo = []; // Temporary debug logging
   
   leads.forEach(lead => {
+    const leadName = `${lead.firstName} ${lead.lastName}`;
+    
+    // Check dateReachedOut
     if (lead.dateReachedOut) {
       const d = toDate(lead.dateReachedOut);
-      if (d) dates.add(getDateKey(d));
+      if (d) {
+        const key = getDateKey(d);
+        dates.add(key);
+        debugInfo.push(`${leadName} - dateReachedOut: ${lead.dateReachedOut} -> ${d.toString()} -> ${key}`);
+      }
     }
+    // Also check dateContacted (some leads use this field)
+    if (lead.dateContacted) {
+      const d = toDate(lead.dateContacted);
+      if (d) {
+        const key = getDateKey(d);
+        dates.add(key);
+        debugInfo.push(`${leadName} - dateContacted: ${lead.dateContacted} -> ${d.toString()} -> ${key}`);
+      }
+    }
+    // Check responseDate
     if (lead.responseDate) {
       const d = toDate(lead.responseDate);
-      if (d) dates.add(getDateKey(d));
+      if (d) {
+        const key = getDateKey(d);
+        dates.add(key);
+        debugInfo.push(`${leadName} - responseDate: ${lead.responseDate} -> ${d.toString()} -> ${key}`);
+      }
     }
+    // Check callDate and followUpDate (call dates are sometimes stored as followUpDate)
     if (lead.callDate) {
       const d = toDate(lead.callDate);
-      if (d) dates.add(getDateKey(d));
+      if (d) {
+        const key = getDateKey(d);
+        dates.add(key);
+        debugInfo.push(`${leadName} - callDate: ${lead.callDate} -> ${d.toString()} -> ${key}`);
+      }
     }
+    if (lead.followUpDate) {
+      const d = toDate(lead.followUpDate);
+      if (d) {
+        const key = getDateKey(d);
+        dates.add(key);
+        debugInfo.push(`${leadName} - followUpDate: ${lead.followUpDate} -> ${d.toString()} -> ${key}`);
+      }
+    }
+    // Check follow-up dates array
+    if (lead.followUpDates && Array.isArray(lead.followUpDates)) {
+      lead.followUpDates.forEach(fuDate => {
+        const d = toDate(fuDate);
+        if (d) {
+          const key = getDateKey(d);
+          dates.add(key);
+          debugInfo.push(`${leadName} - followUpDates[]: ${fuDate} -> ${d.toString()} -> ${key}`);
+        }
+      });
+    }
+    // Note: We intentionally do NOT include createdAt as an activity date
+    // Only actual networking activities count: reach out, response, call, follow-up
+    // The lead creation date without activity doesn't count toward streak
   });
+  
+  // Log debug info to console
+  console.log('=== Activity Dates Debug ===');
+  console.log('Today:', getTodayKey());
+  debugInfo.forEach(info => console.log(info));
+  console.log('Final activity dates:', Array.from(dates).sort());
+  console.log('=== End Debug ===');
   
   return Array.from(dates).sort();
 };
 
 /**
- * Calculate weekday-only streak from activity dates
- * Goes back from today until the last weekday with no activity
+ * Calculate streak from activity dates
+ * Weekdays require activity to continue streak; weekends are free passes that don't break it
+ * but only count toward streak if they have activity
+ * 
+ * Logic:
+ * - Start from today, go backwards
+ * - If weekday: must have activity to continue, otherwise streak breaks
+ * - If weekend: doesn't break streak; adds +1 if there's activity on that weekend day
  */
 export const calculateWeekdayStreak = (leads) => {
   const activityDates = new Set(getActivityDatesFromLeads(leads));
@@ -304,33 +416,52 @@ export const calculateWeekdayStreak = (leads) => {
   let currentDate = new Date();
   let checkedDays = 0;
   const maxDaysToCheck = 365; // Safety limit
+  const debugSteps = []; // Debug logging
   
   while (checkedDays < maxDaysToCheck) {
     const dateKey = getDateKey(currentDate);
     const dayOfWeek = currentDate.getDay();
     const isWeekendDay = dayOfWeek === 0 || dayOfWeek === 6;
+    const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek];
+    const hasActivity = activityDates.has(dateKey);
     
     if (!isWeekendDay) {
-      // It's a weekday - check if there was activity
-      if (activityDates.has(dateKey)) {
+      // Weekday - must have activity to continue streak
+      if (hasActivity) {
         streak++;
+        debugSteps.push(`${dateKey} (${dayName}): HAS ACTIVITY -> streak = ${streak}`);
       } else {
-        // No activity on this weekday - streak breaks here
+        // No activity on weekday - streak breaks
+        debugSteps.push(`${dateKey} (${dayName}): NO ACTIVITY -> BREAK`);
         break;
       }
+    } else {
+      // Weekend - free pass (doesn't break streak)
+      // Count toward streak only if there's activity
+      if (hasActivity) {
+        streak++;
+        debugSteps.push(`${dateKey} (${dayName}): WEEKEND WITH ACTIVITY -> streak = ${streak}`);
+      } else {
+        debugSteps.push(`${dateKey} (${dayName}): WEEKEND (free pass, no activity)`);
+      }
     }
-    // Skip weekends silently (don't break streak, don't count)
     
     // Move to previous day
     currentDate.setDate(currentDate.getDate() - 1);
     checkedDays++;
   }
   
+  console.log('=== Streak Calculation Debug ===');
+  debugSteps.forEach(step => console.log(step));
+  console.log(`Final streak: ${streak}`);
+  console.log('=== End Streak Debug ===');
+  
   return streak;
 };
 
 /**
- * Get longest streak ever achieved (weekday-only)
+ * Get longest streak ever achieved
+ * Weekdays require activity; weekends are free passes but count if they have activity
  */
 export const calculateLongestStreak = (leads) => {
   const activityDates = new Set(getActivityDatesFromLeads(leads));
@@ -347,14 +478,25 @@ export const calculateLongestStreak = (leads) => {
   while (currentDate <= lastDate) {
     const dateKey = getDateKey(currentDate);
     const isWeekendDay = currentDate.getDay() === 0 || currentDate.getDay() === 6;
+    const hasActivity = activityDates.has(dateKey);
     
     if (!isWeekendDay) {
-      if (activityDates.has(dateKey)) {
+      // Weekday
+      if (hasActivity) {
         currentStreak++;
         longestStreak = Math.max(longestStreak, currentStreak);
       } else {
+        // Weekday without activity breaks streak
         currentStreak = 0;
       }
+    } else {
+      // Weekend - free pass (doesn't break streak)
+      // Count if there's activity
+      if (hasActivity) {
+        currentStreak++;
+        longestStreak = Math.max(longestStreak, currentStreak);
+      }
+      // No activity on weekend = free pass, streak continues
     }
     
     currentDate.setDate(currentDate.getDate() + 1);

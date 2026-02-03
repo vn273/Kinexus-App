@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
   Trophy, TrendingUp, Target, Zap, Users, 
-  ChevronRight, Award, Flame, Calendar 
+  ChevronRight, Award, Flame, Calendar, X 
 } from 'lucide-react';
 import useGamification from '../hooks/useGamification';
 
@@ -17,8 +17,12 @@ const ScoreDashboard = ({ compact = false }) => {
     unlockedAchievementsList,
     localStats,
     loading,
-    scoresSyncedFromLeads
+    scoresSyncedFromLeads,
+    leadStats
   } = useGamification();
+  
+  const [showScoreBreakdown, setShowScoreBreakdown] = useState(false);
+  const [showTodayBreakdown, setShowTodayBreakdown] = useState(false);
 
   if (loading) {
     return (
@@ -29,57 +33,111 @@ const ScoreDashboard = ({ compact = false }) => {
     );
   }
 
-  const displayScore = scoresSyncedFromLeads ? (score?.totalScore || 0) : 0;
+  // Use leadStats for consistent score calculation
+  const displayScore = scoresSyncedFromLeads ? (leadStats?.allTime?.totalPoints || 0) : 0;
   const displayStreak = streak?.currentStreak || 0;
 
   if (compact) {
     return (
-      <div className="bg-gradient-to-br from-purple-600 to-blue-600 rounded-xl p-4 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-purple-200 text-sm">Your Score</p>
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">{tier.icon}</span>
-              <span className="text-2xl font-bold">{displayScore.toLocaleString()}</span>
-            </div>
-            <p className="text-purple-200 text-xs">{tier.name}</p>
-          </div>
-          <div className="text-right">
-            {displayStreak > 0 && (
-              <div className="flex items-center gap-1 text-orange-300">
-                <Flame size={18} />
-                <span className="font-bold">{displayStreak}-day streak</span>
+      <>
+        <div 
+          className="bg-gradient-to-br from-purple-600 to-blue-600 rounded-xl p-4 text-white cursor-pointer hover:opacity-95 transition-opacity"
+          onClick={() => setShowScoreBreakdown(true)}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-purple-200 text-sm">Your Score</p>
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{tier.icon}</span>
+                <span className="text-2xl font-bold">{displayScore.toLocaleString()}</span>
               </div>
-            )}
-            {currentMultiplier > 1 && (
-              <p className="text-xs text-purple-200">{currentMultiplier}x multiplier</p>
-            )}
+              <p className="text-purple-200 text-xs">{tier.name}</p>
+            </div>
+            <div className="text-right">
+              {displayStreak > 0 && (
+                <div className="flex items-center gap-1 text-orange-300">
+                  <Flame size={18} />
+                  <span className="font-bold">{displayStreak}-day streak</span>
+                </div>
+              )}
+              {currentMultiplier > 1 && (
+                <p className="text-xs text-purple-200">{currentMultiplier}x multiplier</p>
+              )}
+            </div>
           </div>
+          
+          {/* Progress bar to next tier */}
+          {tierProgress.nextTier && (
+            <div className="mt-3">
+              <div className="flex justify-between text-xs text-purple-200 mb-1">
+                <span>{tierProgress.pointsNeeded} pts to {tierProgress.nextTier.name}</span>
+                <span>{tierProgress.progress}%</span>
+              </div>
+              <div className="h-2 bg-purple-800 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-yellow-400 to-orange-400 transition-all"
+                  style={{ width: `${tierProgress.progress}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
         
-        {/* Progress bar to next tier */}
-        {tierProgress.nextTier && (
-          <div className="mt-3">
-            <div className="flex justify-between text-xs text-purple-200 mb-1">
-              <span>{tierProgress.pointsNeeded} pts to {tierProgress.nextTier.name}</span>
-              <span>{tierProgress.progress}%</span>
-            </div>
-            <div className="h-2 bg-purple-800 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-yellow-400 to-orange-400 transition-all"
-                style={{ width: `${tierProgress.progress}%` }}
-              />
+        {/* Score Breakdown Popup */}
+        {showScoreBreakdown && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowScoreBreakdown(false)}>
+            <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Trophy className="text-yellow-500" size={24} />
+                  <h3 className="text-lg font-bold text-gray-900">Total Score Breakdown</h3>
+                </div>
+                <button onClick={() => setShowScoreBreakdown(false)} className="text-gray-400 hover:text-gray-600">
+                  <X size={20} />
+                </button>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-gray-600">Reach Outs</span>
+                  <div className="text-right">
+                    <span className="font-bold text-gray-900">{leadStats?.allTime?.messagesSent || 0}</span>
+                    <span className="text-gray-400 text-sm ml-2">× 5 pts = {(leadStats?.allTime?.messagesSent || 0) * 5}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-gray-600">Responses</span>
+                  <div className="text-right">
+                    <span className="font-bold text-gray-900">{leadStats?.allTime?.responses || 0}</span>
+                    <span className="text-gray-400 text-sm ml-2">× 5 pts = {(leadStats?.allTime?.responses || 0) * 5}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                  <span className="text-gray-600">Calls Scheduled</span>
+                  <div className="text-right">
+                    <span className="font-bold text-gray-900">{leadStats?.allTime?.calls || 0}</span>
+                    <span className="text-gray-400 text-sm ml-2">× 20 pts = {(leadStats?.allTime?.calls || 0) * 20}</span>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center py-3 bg-yellow-50 rounded-lg px-3 -mx-3">
+                  <span className="font-semibold text-gray-900">Total Score</span>
+                  <span className="text-xl font-bold text-yellow-600">{leadStats?.allTime?.totalPoints || 0}</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
-      </div>
+      </>
     );
   }
 
   return (
     <div className="space-y-6">
       {/* Main Score Card */}
-      <div className="bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-xl">
+      <div 
+        className="bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-600 rounded-2xl p-6 text-white shadow-xl cursor-pointer hover:opacity-95 transition-opacity"
+        onClick={() => setShowScoreBreakdown(true)}
+      >
         <div className="flex items-start justify-between mb-6">
           <div>
             <p className="text-purple-200 text-sm mb-1">Your Networking Score</p>
@@ -243,6 +301,51 @@ const ScoreDashboard = ({ compact = false }) => {
             {targetCompanies.slice(0, 3).map(company => (
               <CompanyProgress key={company.companyName} company={company} />
             ))}
+          </div>
+        </div>
+      )}
+      
+      {/* Score Breakdown Popup for full view */}
+      {showScoreBreakdown && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowScoreBreakdown(false)}>
+          <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Trophy className="text-yellow-500" size={24} />
+                <h3 className="text-lg font-bold text-gray-900">Total Score Breakdown</h3>
+              </div>
+              <button onClick={() => setShowScoreBreakdown(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Reach Outs</span>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900">{leadStats?.allTime?.messagesSent || 0}</span>
+                  <span className="text-gray-400 text-sm ml-2">× 5 pts = {(leadStats?.allTime?.messagesSent || 0) * 5}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Responses</span>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900">{leadStats?.allTime?.responses || 0}</span>
+                  <span className="text-gray-400 text-sm ml-2">× 5 pts = {(leadStats?.allTime?.responses || 0) * 5}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center py-2 border-b border-gray-100">
+                <span className="text-gray-600">Calls Scheduled</span>
+                <div className="text-right">
+                  <span className="font-bold text-gray-900">{leadStats?.allTime?.calls || 0}</span>
+                  <span className="text-gray-400 text-sm ml-2">× 20 pts = {(leadStats?.allTime?.calls || 0) * 20}</span>
+                </div>
+              </div>
+              <div className="flex justify-between items-center py-3 bg-yellow-50 rounded-lg px-3 -mx-3">
+                <span className="font-semibold text-gray-900">Total Score</span>
+                <span className="text-xl font-bold text-yellow-600">{leadStats?.allTime?.totalPoints || 0}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}

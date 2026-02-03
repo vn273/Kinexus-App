@@ -22,13 +22,21 @@ const GOAL_METRICS = [
 export { GOAL_METRICS };
 
 const GoalSetting = ({ compact = false }) => {
-  const { goals, setMonthlyGoals, loading, refreshScores } = useGamification();
+  const { goals, setMonthlyGoals, loading, refreshScores, leadStats } = useGamification();
   const [isEditing, setIsEditing] = useState(false);
   const [editedGoals, setEditedGoals] = useState({});
   const [saving, setSaving] = useState(false);
 
   // Get current month name
   const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  
+  // Use leadStats.month for progress (consistent with NetworkingTracker)
+  const monthlyProgress = {
+    coldEmails: leadStats?.month?.messagesSent || 0,
+    followUps: leadStats?.month?.followUps || 0,
+    responses: leadStats?.month?.responses || 0,
+    calls: leadStats?.month?.calls || 0
+  };
 
   useEffect(() => {
     if (goals?.targets) {
@@ -56,14 +64,15 @@ const GoalSetting = ({ compact = false }) => {
   };
 
   // Calculate overall progress as sum of each sub-goal percentage × 25% (rounded for UI)
+  // Use monthlyProgress from leadStats for consistency
   const overallProgress = (() => {
-    if (!goals?.targets || !goals?.progress) return 0;
+    if (!goals?.targets) return 0;
     
     let totalProgress = 0;
     
     GOAL_METRICS.forEach(metric => {
       const target = goals.targets[metric.id] || metric.defaultTarget;
-      const current = goals.progress[metric.id] || 0;
+      const current = monthlyProgress[metric.id] || 0;
       if (target > 0) {
         // Each goal contributes 25% when fully complete
         const goalProgress = Math.min((current / target) * 100, 100);
@@ -88,16 +97,16 @@ const GoalSetting = ({ compact = false }) => {
   }
 
   if (compact) {
-    // Calculate completed goals
+    // Calculate completed goals using monthlyProgress
     const completedGoals = GOAL_METRICS.filter(metric => {
       const target = goals.targets?.[metric.id] || metric.defaultTarget;
-      const current = goals.progress?.[metric.id] || 0;
+      const current = monthlyProgress[metric.id] || 0;
       return target > 0 && current >= target;
     }).length;
     
     const earnedBonus = GOAL_METRICS.filter(metric => {
       const target = goals.targets?.[metric.id] || metric.defaultTarget;
-      const current = goals.progress?.[metric.id] || 0;
+      const current = monthlyProgress[metric.id] || 0;
       return target > 0 && current >= target;
     }).reduce((sum, m) => sum + m.bonusPoints, 0);
     
@@ -139,11 +148,11 @@ const GoalSetting = ({ compact = false }) => {
           )}
         </div>
 
-        {/* Top 4 goals */}
+        {/* Top 4 goals - use monthlyProgress */}
         <div className="space-y-2">
           {GOAL_METRICS.slice(0, 4).map(metric => {
             const target = goals.targets?.[metric.id] || metric.defaultTarget;
-            const current = goals.progress?.[metric.id] || 0;
+            const current = monthlyProgress[metric.id] || 0;
             const progress = target > 0 ? Math.min((current / target) * 100, 100) : 0;
             const isComplete = progress >= 100;
             

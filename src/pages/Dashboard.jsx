@@ -41,6 +41,8 @@ const Dashboard = () => {
   const { contacts, deleteContact, updateContact, addContact, checkBatchDuplicates } = useContacts();
   const navigate = useNavigate();
   const { syncGoalsFromLeads } = useGamification();
+  const syncGoalsRef = useRef(syncGoalsFromLeads);
+  syncGoalsRef.current = syncGoalsFromLeads;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRelationshipTypes, setSelectedRelationshipTypes] = useState([]);
@@ -74,13 +76,13 @@ const Dashboard = () => {
       if (!currentUser) return;
       try {
         const leads = await networkingService.getNetworkingLeads(currentUser.uid);
-        await syncGoalsFromLeads(leads);
+        await syncGoalsRef.current(leads);
       } catch (error) {
         console.error('Error syncing scores from leads:', error);
       }
     };
     loadLeadsAndSyncScores();
-  }, [currentUser, syncGoalsFromLeads]);
+  }, [currentUser]);
 
   // Listen for quick add keyboard shortcut
   useEffect(() => {
