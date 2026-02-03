@@ -166,9 +166,19 @@ export const GamificationProvider = ({ children }) => {
         ...scoreData,
         activityHighScore: storedHighScore
       });
+      // Don't use cached streak values from Firebase - they will be calculated from actual leads
+      // Only preserve activityDates and other metadata, keep currentStreak/longestStreak at 0
+      // until syncGoalsFromLeads calculates them from actual lead data
       setStreak(prev => ({
-        ...streakData,
-        activityDates: streakData.activityDates || prev.activityDates || []
+        ...prev,
+        // Don't load currentStreak/longestStreak from Firebase - will be calculated from leads
+        lastActivityDate: streakData.lastActivityDate || prev.lastActivityDate,
+        freezesUsed: streakData.freezesUsed || 0,
+        freezeMonth: streakData.freezeMonth || null,
+        // Keep streak values at 0 until leads are synced
+        currentStreak: 0,
+        longestStreak: 0,
+        activityDates: []
       }));
       setAchievements(achievementsData);
       setGoals(goalsData);

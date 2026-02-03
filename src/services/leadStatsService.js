@@ -324,77 +324,42 @@ export const isWeekend = (date) => {
  */
 export const getActivityDatesFromLeads = (leads) => {
   const dates = new Set();
-  const debugInfo = []; // Temporary debug logging
   
   leads.forEach(lead => {
-    const leadName = `${lead.firstName} ${lead.lastName}`;
-    
     // Check dateReachedOut
     if (lead.dateReachedOut) {
       const d = toDate(lead.dateReachedOut);
-      if (d) {
-        const key = getDateKey(d);
-        dates.add(key);
-        debugInfo.push(`${leadName} - dateReachedOut: ${lead.dateReachedOut} -> ${d.toString()} -> ${key}`);
-      }
+      if (d) dates.add(getDateKey(d));
     }
     // Also check dateContacted (some leads use this field)
     if (lead.dateContacted) {
       const d = toDate(lead.dateContacted);
-      if (d) {
-        const key = getDateKey(d);
-        dates.add(key);
-        debugInfo.push(`${leadName} - dateContacted: ${lead.dateContacted} -> ${d.toString()} -> ${key}`);
-      }
+      if (d) dates.add(getDateKey(d));
     }
     // Check responseDate
     if (lead.responseDate) {
       const d = toDate(lead.responseDate);
-      if (d) {
-        const key = getDateKey(d);
-        dates.add(key);
-        debugInfo.push(`${leadName} - responseDate: ${lead.responseDate} -> ${d.toString()} -> ${key}`);
-      }
+      if (d) dates.add(getDateKey(d));
     }
     // Check callDate and followUpDate (call dates are sometimes stored as followUpDate)
     if (lead.callDate) {
       const d = toDate(lead.callDate);
-      if (d) {
-        const key = getDateKey(d);
-        dates.add(key);
-        debugInfo.push(`${leadName} - callDate: ${lead.callDate} -> ${d.toString()} -> ${key}`);
-      }
+      if (d) dates.add(getDateKey(d));
     }
     if (lead.followUpDate) {
       const d = toDate(lead.followUpDate);
-      if (d) {
-        const key = getDateKey(d);
-        dates.add(key);
-        debugInfo.push(`${leadName} - followUpDate: ${lead.followUpDate} -> ${d.toString()} -> ${key}`);
-      }
+      if (d) dates.add(getDateKey(d));
     }
     // Check follow-up dates array
     if (lead.followUpDates && Array.isArray(lead.followUpDates)) {
       lead.followUpDates.forEach(fuDate => {
         const d = toDate(fuDate);
-        if (d) {
-          const key = getDateKey(d);
-          dates.add(key);
-          debugInfo.push(`${leadName} - followUpDates[]: ${fuDate} -> ${d.toString()} -> ${key}`);
-        }
+        if (d) dates.add(getDateKey(d));
       });
     }
     // Note: We intentionally do NOT include createdAt as an activity date
     // Only actual networking activities count: reach out, response, call, follow-up
-    // The lead creation date without activity doesn't count toward streak
   });
-  
-  // Log debug info to console
-  console.log('=== Activity Dates Debug ===');
-  console.log('Today:', getTodayKey());
-  debugInfo.forEach(info => console.log(info));
-  console.log('Final activity dates:', Array.from(dates).sort());
-  console.log('=== End Debug ===');
   
   return Array.from(dates).sort();
 };
@@ -416,23 +381,19 @@ export const calculateWeekdayStreak = (leads) => {
   let currentDate = new Date();
   let checkedDays = 0;
   const maxDaysToCheck = 365; // Safety limit
-  const debugSteps = []; // Debug logging
   
   while (checkedDays < maxDaysToCheck) {
     const dateKey = getDateKey(currentDate);
     const dayOfWeek = currentDate.getDay();
     const isWeekendDay = dayOfWeek === 0 || dayOfWeek === 6;
-    const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayOfWeek];
     const hasActivity = activityDates.has(dateKey);
     
     if (!isWeekendDay) {
       // Weekday - must have activity to continue streak
       if (hasActivity) {
         streak++;
-        debugSteps.push(`${dateKey} (${dayName}): HAS ACTIVITY -> streak = ${streak}`);
       } else {
         // No activity on weekday - streak breaks
-        debugSteps.push(`${dateKey} (${dayName}): NO ACTIVITY -> BREAK`);
         break;
       }
     } else {
@@ -440,9 +401,6 @@ export const calculateWeekdayStreak = (leads) => {
       // Count toward streak only if there's activity
       if (hasActivity) {
         streak++;
-        debugSteps.push(`${dateKey} (${dayName}): WEEKEND WITH ACTIVITY -> streak = ${streak}`);
-      } else {
-        debugSteps.push(`${dateKey} (${dayName}): WEEKEND (free pass, no activity)`);
       }
     }
     
@@ -450,11 +408,6 @@ export const calculateWeekdayStreak = (leads) => {
     currentDate.setDate(currentDate.getDate() - 1);
     checkedDays++;
   }
-  
-  console.log('=== Streak Calculation Debug ===');
-  debugSteps.forEach(step => console.log(step));
-  console.log(`Final streak: ${streak}`);
-  console.log('=== End Streak Debug ===');
   
   return streak;
 };
