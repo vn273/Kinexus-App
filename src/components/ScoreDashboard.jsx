@@ -16,7 +16,8 @@ const ScoreDashboard = ({ compact = false }) => {
     targetCompanies,
     unlockedAchievementsList,
     localStats,
-    loading
+    loading,
+    scoresSyncedFromLeads
   } = useGamification();
 
   if (loading) {
@@ -28,7 +29,7 @@ const ScoreDashboard = ({ compact = false }) => {
     );
   }
 
-  const displayScore = score?.totalScore || 0;
+  const displayScore = scoresSyncedFromLeads ? (score?.totalScore || 0) : 0;
   const displayStreak = streak?.currentStreak || 0;
 
   if (compact) {

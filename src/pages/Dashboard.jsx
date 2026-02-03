@@ -22,6 +22,8 @@ import ScoreDashboard from '../components/ScoreDashboard';
 import StreakTracker from '../components/StreakTracker';
 import AchievementsList from '../components/AchievementsList';
 import GoalSetting from '../components/GoalSetting';
+import useGamification from '../hooks/useGamification';
+import * as networkingService from '../services/networkingLeadService';
 
 const SORT_OPTIONS = [
   { value: 'name-asc', label: 'Name (A-Z)' },
@@ -38,6 +40,7 @@ const Dashboard = () => {
   const { currentUser, logout } = useAuth();
   const { contacts, deleteContact, updateContact, addContact, checkBatchDuplicates } = useContacts();
   const navigate = useNavigate();
+  const { syncGoalsFromLeads } = useGamification();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRelationshipTypes, setSelectedRelationshipTypes] = useState([]);
@@ -64,6 +67,20 @@ const Dashboard = () => {
   const [showBatchDuplicateModal, setShowBatchDuplicateModal] = useState(false);
   const [batchDuplicateResult, setBatchDuplicateResult] = useState(null);
   const [pendingImportContacts, setPendingImportContacts] = useState([]);
+
+  // Load leads and sync scores on mount
+  useEffect(() => {
+    const loadLeadsAndSyncScores = async () => {
+      if (!currentUser) return;
+      try {
+        const leads = await networkingService.getNetworkingLeads(currentUser.uid);
+        await syncGoalsFromLeads(leads);
+      } catch (error) {
+        console.error('Error syncing scores from leads:', error);
+      }
+    };
+    loadLeadsAndSyncScores();
+  }, [currentUser, syncGoalsFromLeads]);
 
   // Listen for quick add keyboard shortcut
   useEffect(() => {
