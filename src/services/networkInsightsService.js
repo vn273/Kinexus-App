@@ -146,7 +146,11 @@ export const getInteractionStats = (contacts) => {
     : null;
   
   // Find contacts needing attention (overdue based on their regularity)
+  // Exclude contacts marked as "alwaysGreen" (friends/family who stay green regardless)
   const needsAttention = contacts.filter(c => {
+    // Skip contacts marked as always green - they never need attention
+    if (c.alwaysGreen) return false;
+    
     const days = daysSinceContact(c.lastContactDate);
     if (days === null) return true; // Never contacted
     
