@@ -312,6 +312,24 @@ export const markLeadAsDead = async (leadId) => {
   }
 };
 
+// Revive a dead lead (undo mark as dead)
+export const reviveLead = async (leadId, lead) => {
+  try {
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    // Clear the dead status - let calculateStatus determine the new status
+    // We need to temporarily set a non-dead status so calculateStatus can work
+    const tempLead = { ...lead, status: null };
+    const newStatus = calculateStatus(tempLead);
+    await updateDoc(leadRef, {
+      status: newStatus
+    });
+    return newStatus;
+  } catch (error) {
+    console.error('Error reviving lead:', error);
+    throw error;
+  }
+};
+
 // Log response on lead
 export const logResponse = async (leadId, notes = '') => {
   try {

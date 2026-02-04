@@ -11,7 +11,8 @@ const LeadDetailPanel = ({
   onLogResponse, 
   onScheduleCall, 
   onConvert, 
-  onMarkDead, 
+  onMarkDead,
+  onRevive,
   onEdit, 
   onDelete,
   onRecordFollowUp 
@@ -388,6 +389,16 @@ const LeadDetailPanel = ({
               className="px-4 py-2 text-sm font-medium text-orange-600 bg-orange-100 rounded-lg hover:bg-orange-200 transition-colors"
             >
               Mark Dead
+            </button>
+          )}
+          
+          {lead.status === 'Dead Lead' && onRevive && (
+            <button
+              onClick={() => onRevive(lead)}
+              className="px-4 py-2 text-sm font-medium text-green-600 bg-green-100 rounded-lg hover:bg-green-200 transition-colors flex items-center gap-1"
+            >
+              <RotateCcw size={14} />
+              Revive
             </button>
           )}
           

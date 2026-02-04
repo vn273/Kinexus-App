@@ -8,7 +8,8 @@ const NetworkingLeadCardCompact = ({
   onLogResponse, 
   onScheduleCall, 
   onConvert, 
-  onMarkDead, 
+  onMarkDead,
+  onRevive,
   onEdit, 
   onDelete,
   onRecordFollowUp,
@@ -234,6 +235,17 @@ const NetworkingLeadCardCompact = ({
                 title="Mark as Dead Lead"
               >
                 <XCircle size={14} />
+              </button>
+            )}
+            
+            {lead.status === 'Dead Lead' && onRevive && (
+              <button
+                onClick={() => onRevive(lead)}
+                className="px-2.5 py-1 text-xs font-medium text-green-600 bg-green-50 rounded hover:bg-green-100 transition-colors flex items-center gap-1"
+                title="Revive Lead"
+              >
+                <RotateCcw size={12} />
+                Revive
               </button>
             )}
             

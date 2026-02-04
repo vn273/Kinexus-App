@@ -740,6 +740,16 @@ const NetworkingTracker = () => {
     }
   };
   
+  const handleReviveLead = async (lead) => {
+    try {
+      await networkingService.reviveLead(lead.id, lead);
+      await loadLeads();
+    } catch (error) {
+      console.error('Error reviving lead:', error);
+      alert('Failed to revive lead');
+    }
+  };
+  
   // Delete lead permanently
   const handleDelete = async (lead) => {
     if (!window.confirm(`Permanently delete ${lead.firstName} ${lead.lastName}? This cannot be undone.`)) {
@@ -1363,6 +1373,7 @@ const NetworkingTracker = () => {
                                 onScheduleCall={handleScheduleCall}
                                 onConvert={handleConvert}
                                 onMarkDead={handleMarkDead}
+                                onRevive={handleReviveLead}
                                 onEdit={handleEdit}
                                 onDelete={handleDelete}
                                 onRecordFollowUp={handleRecordFollowUp}
@@ -1390,6 +1401,7 @@ const NetworkingTracker = () => {
               onScheduleCall={(lead) => { handleScheduleCall(lead); }}
               onConvert={handleConvert}
               onMarkDead={handleMarkDead}
+              onRevive={handleReviveLead}
               onEdit={handleEdit}
               onDelete={(lead) => { handleDelete(lead); setSelectedLead(null); }}
               onRecordFollowUp={(lead) => { handleRecordFollowUp(lead); }}
