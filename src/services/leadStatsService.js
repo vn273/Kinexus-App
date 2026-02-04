@@ -277,18 +277,73 @@ export const recalculateTodaysScore = (userId, todayScore) => {
 
 /**
  * Calculate lead status (used if not already set)
+ * 
+ * Status logic:
+ * - Converted to Contact: has linkedContactId
+ * - Call Scheduled: callScheduled is true
+ * - Pending Response: 
+ *     - reached out less than a week ago, OR
+ *     - has a follow-up recorded less than a week ago, OR
+ *     - has a response marked but no call scheduled yet
+ * - Follow-up Needed: reached out over a week ago with no response AND no recent follow-up
+ * - Not Contacted: hasn't been reached out to yet
  */
 const calculateLeadStatus = (lead) => {
   if (lead.linkedContactId) return 'Converted to Contact';
   if (lead.callScheduled) return 'Call Scheduled';
+  
+  // If they have a response but no call scheduled, they're pending (waiting for call)
   if (lead.response) return 'Pending Response';
   
   if (lead.reachedOut) {
+    const now = new Date();
+    
+    // Check if there's a recent follow-up (within last 7 days)
+    let hasRecentFollowUp = false;
+    if (lead.followUpDates && Array.isArray(lead.followUpDates) && lead.followUpDates.length > 0) {
+      // Get the most recent follow-up date
+      const mostRecentFollowUp = lead.followUpDates
+        .map(fu => {
+          if (!fu) return null;
+          const fuDate = fu && typeof fu === 'object' && fu.date ? fu.date : fu;
+          return toDate(fuDate);
+        })
+        .filter(d => d && !isNaN(d.getTime()))
+        .sort((a, b) => b - a)[0]; // Sort descending, get most recent
+      
+      if (mostRecentFollowUp) {
+        const daysSinceFollowUp = Math.floor((now - mostRecentFollowUp) / (1000 * 60 * 60 * 24));
+        if (daysSinceFollowUp <= 7) {
+          hasRecentFollowUp = true;
+        }
+      }
+    }
+    
+    // Also check lastFollowUpDate field
+    if (!hasRecentFollowUp && lead.lastFollowUpDate) {
+      const lastFollowUp = toDate(lead.lastFollowUpDate);
+      if (lastFollowUp && !isNaN(lastFollowUp.getTime())) {
+        const daysSinceFollowUp = Math.floor((now - lastFollowUp) / (1000 * 60 * 60 * 24));
+        if (daysSinceFollowUp <= 7) {
+          hasRecentFollowUp = true;
+        }
+      }
+    }
+    
+    // If there's a recent follow-up, they're pending response
+    if (hasRecentFollowUp) {
+      return 'Pending Response';
+    }
+    
+    // Check how long since initial reach out
     const contactDate = toDate(lead.dateReachedOut);
     if (contactDate) {
-      const daysSinceContact = Math.floor((new Date() - contactDate) / (1000 * 60 * 60 * 24));
+      const daysSinceContact = Math.floor((now - contactDate) / (1000 * 60 * 60 * 24));
+      // If reached out over a week ago with no response and no recent follow-up
       if (daysSinceContact > 7) return 'Follow-up Needed';
     }
+    
+    // Reached out within the last week
     return 'Pending Response';
   }
   
