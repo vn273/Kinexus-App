@@ -42,6 +42,7 @@ const toDate = (value) => {
 // Calculate status based on lead data
 /**
  * Status logic:
+ * - Dead Lead: manually marked, preserved as-is
  * - Converted to Contact: has linkedContactId
  * - Call Scheduled: callScheduled is true
  * - Pending Response: 
@@ -52,6 +53,11 @@ const toDate = (value) => {
  * - Not Contacted: hasn't been reached out to yet
  */
 export const calculateStatus = (lead) => {
+  // Dead Lead is manually set - preserve it
+  if (lead.status === 'Dead Lead') {
+    return 'Dead Lead';
+  }
+  
   // Already converted
   if (lead.linkedContactId) {
     return 'Converted to Contact';
