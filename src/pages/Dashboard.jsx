@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Plus, LogOut, Download, Upload, X, Trash2, Edit, TrendingUp, Check, CheckSquare, Square, ArrowUpDown, Calendar, Tag, Share2, Settings, Trophy } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useContacts } from '../contexts/ContactContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { daysSinceContact, CONTACT_REGULARITY_DAYS } from '../utils/dateHelpers';
 import Sidebar from '../components/Sidebar';
 import SearchBar from '../components/SearchBar';
@@ -14,7 +15,7 @@ import DuplicateWarningModal from '../components/DuplicateWarningModal';
 import { useShiftSelect } from '../hooks/useShiftSelect';
 import { exportToCSV, downloadCSV, parseLinkedInCSV } from '../services/csvService';
 import { searchContacts } from '../services/searchService';
-import { RELATIONSHIP_TYPES, getSectorLabel } from '../constants/categories';
+import { getRelationshipTypeLabel, getSectorLabel } from '../constants/categories';
 import ReminderWidget from '../components/ReminderWidget';
 import NetworkInsights from '../components/NetworkInsights';
 import AIAssistant from '../components/AIAssistant';
@@ -39,6 +40,7 @@ const SORT_OPTIONS = [
 const Dashboard = () => {
   const { currentUser, logout } = useAuth();
   const { contacts, deleteContact, updateContact, addContact, checkBatchDuplicates } = useContacts();
+  const { relationshipTypes, sectors } = useSettings();
   const navigate = useNavigate();
   const { syncGoalsFromLeads } = useGamification();
   const syncGoalsRef = useRef(syncGoalsFromLeads);
@@ -141,7 +143,9 @@ const Dashboard = () => {
       relationshipTypes: selectedRelationshipTypes,
       sector: selectedSector,
       company: selectedCompany,
-      location: selectedLocation
+      location: selectedLocation,
+      customRelationshipTypes: relationshipTypes,
+      customSectors: sectors
     });
     
     // Apply contact status filter
@@ -150,7 +154,7 @@ const Dashboard = () => {
     }
     
     return results;
-  }, [contacts, searchQuery, selectedRelationshipTypes, selectedSector, selectedCompany, selectedLocation, selectedContactStatus]);
+  }, [contacts, searchQuery, selectedRelationshipTypes, selectedSector, selectedCompany, selectedLocation, selectedContactStatus, relationshipTypes, sectors]);
   
   // Sort contacts
   const sortedContacts = [...filteredContacts].sort((a, b) => {
@@ -784,12 +788,12 @@ const Dashboard = () => {
                         : (selectedContact.relationshipType ? [selectedContact.relationshipType] : [])
                       ).map((type, idx) => (
                         <span key={idx} className="px-3 py-1 text-sm font-medium bg-blue-100 text-blue-800 rounded-full">
-                          {RELATIONSHIP_TYPES.find(t => t.value === type)?.label || type}
+                          {getRelationshipTypeLabel(type, relationshipTypes)}
                         </span>
                       ))}
                       {selectedContact.sector && (
                         <span className="px-3 py-1 text-sm font-medium bg-purple-100 text-purple-800 rounded-full">
-                          {getSectorLabel(selectedContact.sector)}
+                          {getSectorLabel(selectedContact.sector, sectors)}
                         </span>
                       )}
                     </div>

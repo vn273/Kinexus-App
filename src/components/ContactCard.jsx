@@ -1,8 +1,11 @@
 import { Building2, Mail, Phone, Linkedin, Calendar, MapPin, Briefcase, GraduationCap, Heart } from 'lucide-react';
 import { getContactStatusColor, formatDate } from '../utils/dateHelpers';
 import { getRelationshipTypeLabel, getSectorLabel } from '../constants/categories';
+import { useSettings } from '../contexts/SettingsContext';
 
 const ContactCard = ({ contact, onClick }) => {
+  const { relationshipTypes, sectors } = useSettings();
+  
   // Always green contacts stay green regardless of last contact date
   const statusColor = contact.alwaysGreen 
     ? 'green' 
@@ -15,16 +18,16 @@ const ContactCard = ({ contact, onClick }) => {
     gray: 'bg-gray-100 border-gray-400'
   };
 
-  // Get display values
+  // Get display values - pass custom types/sectors for proper label lookup
   const jobTitle = contact.jobTitle || contact.role;
-  const sectorLabel = contact.sector ? getSectorLabel(contact.sector) : null;
+  const sectorLabel = contact.sector ? getSectorLabel(contact.sector, sectors) : null;
   
   // Handle both old single value and new array format
   const relationshipLabels = (() => {
     if (contact.relationshipTypes && Array.isArray(contact.relationshipTypes)) {
-      return contact.relationshipTypes.map(t => getRelationshipTypeLabel(t));
+      return contact.relationshipTypes.map(t => getRelationshipTypeLabel(t, relationshipTypes));
     } else if (contact.relationshipType) {
-      return [getRelationshipTypeLabel(contact.relationshipType)];
+      return [getRelationshipTypeLabel(contact.relationshipType, relationshipTypes)];
     }
     return [];
   })();

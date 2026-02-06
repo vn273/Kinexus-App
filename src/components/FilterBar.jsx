@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { Filter, X, ChevronDown } from 'lucide-react';
-import { SECTORS } from '../constants/categories';
+import { SECTORS, getSectorLabel } from '../constants/categories';
 import { getUniqueCompanies, getUniqueLocations } from '../services/searchService';
+import { useSettings } from '../contexts/SettingsContext';
 
 const FilterBar = ({ 
   contacts,
@@ -15,6 +16,7 @@ const FilterBar = ({
   onContactStatusChange,
   onResetFilters
 }) => {
+  const { sectors: allSectors } = useSettings();
   const [sectorOpen, setSectorOpen] = useState(false);
   const [companyOpen, setCompanyOpen] = useState(false);
   const [locationOpen, setLocationOpen] = useState(false);
@@ -83,7 +85,7 @@ const FilterBar = ({
               : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
           }`}
         >
-          <span>Sector: {selectedSector ? SECTORS.find(s => s.value === selectedSector)?.label || 'All Finance' : 'All'}</span>
+          <span>Sector: {selectedSector ? (selectedSector === 'finance-all' ? 'All Finance' : getSectorLabel(selectedSector, allSectors)) : 'All'}</span>
           <ChevronDown size={14} className={`transition-transform ${sectorOpen ? 'rotate-180' : ''}`} />
         </button>
         
@@ -103,7 +105,7 @@ const FilterBar = ({
               >
                 💰 All Finance
               </button>
-              {SECTORS.map(sector => (
+              {allSectors.map(sector => (
                 <button
                   key={sector.value}
                   onClick={() => handleSectorSelect(sector.value)}

@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { ChevronDown, ChevronRight, RefreshCw, Download, Eye, EyeOff, Filter, X } from 'lucide-react';
-import { RELATIONSHIP_TYPES, SECTORS, formatValueToLabel } from '../constants/categories';
+import { RELATIONSHIP_TYPES, SECTORS, getRelationshipTypeLabel, getSectorLabel as getCategorySectorLabel } from '../constants/categories';
 import { CLOSENESS_LEVELS, STRATEGIC_VALUE_LEVELS, getFilterOptions } from '../services/graphLayoutService';
+import { useSettings } from '../contexts/SettingsContext';
 
 const GraphControls = ({
   contacts,
@@ -16,6 +17,8 @@ const GraphControls = ({
   onResetView,
   onExportPNG
 }) => {
+  const { relationshipTypes: customRelationshipTypes, sectors: customSectors } = useSettings();
+  
   const [expandedSections, setExpandedSections] = useState({
     viewMode: true,
     filters: true,
@@ -54,18 +57,10 @@ const GraphControls = ({
   const activeFiltersCount = Object.keys(filters).length;
   
   // Get label for relationship type (handles custom types too)
-  const getRelationshipLabel = (value) => {
-    const type = RELATIONSHIP_TYPES.find(t => t.value === value);
-    if (type) return type.label;
-    // Format custom types: 'personal-other' -> 'Personal Other'
-    return formatValueToLabel(value);
-  };
+  const getRelationshipLabel = (value) => getRelationshipTypeLabel(value, customRelationshipTypes);
   
-  // Get label for sector
-  const getSectorLabel = (value) => {
-    const sector = SECTORS.find(s => s.value === value);
-    return sector ? sector.label : value;
-  };
+  // Get label for sector (handles custom sectors too)
+  const getSectorLabel = (value) => getCategorySectorLabel(value, customSectors);
 
   return (
     <div className="w-72 bg-white border-l border-gray-200 overflow-y-auto">

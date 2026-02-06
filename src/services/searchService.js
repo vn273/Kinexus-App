@@ -1,4 +1,4 @@
-import { RELATIONSHIP_TYPES, SECTORS } from '../constants/categories';
+import { RELATIONSHIP_TYPES, SECTORS, getRelationshipTypeLabel as getCategoryRelationshipLabel, getSectorLabel as getCategorySectorLabel } from '../constants/categories';
 
 /**
  * Search contacts across multiple fields
@@ -13,7 +13,13 @@ export const searchContacts = (contacts, query, filters = {}) => {
     sector = null,          // Single sector value (AND logic)
     company = null,         // Single company value (AND logic)
     location = null,        // Single location value (AND logic)
+    customRelationshipTypes = [], // Custom relationship types from settings
+    customSectors = [],     // Custom sectors from settings
   } = filters;
+
+  // Local helpers that use custom types
+  const getSectorLabelWithCustom = (value) => getCategorySectorLabel(value, customSectors);
+  const getRelationshipLabelWithCustom = (value) => getCategoryRelationshipLabel(value, customRelationshipTypes);
 
   return contacts.filter(contact => {
     // Apply search query filter
@@ -28,9 +34,9 @@ export const searchContacts = (contacts, query, filters = {}) => {
           contact.role?.toLowerCase().includes(token) || // Legacy field
           contact.company?.toLowerCase().includes(token) ||
           contact.sector?.toLowerCase().includes(token) ||
-          getSectorLabel(contact.sector)?.toLowerCase().includes(token) ||
+          getSectorLabelWithCustom(contact.sector)?.toLowerCase().includes(token) ||
           contact.relationshipType?.toLowerCase().includes(token) ||
-          getRelationshipLabel(contact.relationshipType)?.toLowerCase().includes(token) ||
+          getRelationshipLabelWithCustom(contact.relationshipType)?.toLowerCase().includes(token) ||
           contact.location?.toLowerCase().includes(token) ||
           contact.email?.toLowerCase().includes(token) ||
           contact.notes?.toLowerCase().includes(token) ||
@@ -137,17 +143,6 @@ export const getSectorCounts = (contacts) => {
   });
   counts['unassigned'] = contacts.filter(c => !c.sector).length;
   return counts;
-};
-
-// Helper to get label from value
-const getSectorLabel = (value) => {
-  const sector = SECTORS.find(s => s.value === value);
-  return sector ? sector.label : '';
-};
-
-const getRelationshipLabel = (value) => {
-  const type = RELATIONSHIP_TYPES.find(t => t.value === value);
-  return type ? type.label : '';
 };
 
 /**

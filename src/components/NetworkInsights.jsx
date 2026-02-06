@@ -12,6 +12,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useContacts } from '../contexts/ContactContext';
+import { useSettings } from '../contexts/SettingsContext';
 import { getNetworkInsights } from '../services/networkInsightsService';
 import PieChart from './PieChart';
 
@@ -31,10 +32,11 @@ const getColor = (index) => CHART_COLORS[index % CHART_COLORS.length];
 
 const NetworkInsights = ({ onContactClick }) => {
   const { contacts } = useContacts();
+  const { relationshipTypes, sectors } = useSettings();
   const [isExpanded, setIsExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
   
-  const insights = useMemo(() => getNetworkInsights(contacts), [contacts]);
+  const insights = useMemo(() => getNetworkInsights(contacts, { relationshipTypes, sectors }), [contacts, relationshipTypes, sectors]);
   
   if (contacts.length === 0) {
     return null;

@@ -40,8 +40,10 @@ export const getNetworkStats = (contacts) => {
 
 /**
  * Get relationship type breakdown
+ * @param {Array} contacts - Array of contacts
+ * @param {Array} customTypes - Custom relationship types from settings (optional)
  */
-export const getRelationshipBreakdown = (contacts) => {
+export const getRelationshipBreakdown = (contacts, customTypes = []) => {
   const counts = {};
   
   contacts.forEach(contact => {
@@ -59,7 +61,7 @@ export const getRelationshipBreakdown = (contacts) => {
   const breakdown = Object.entries(counts)
     .map(([type, count]) => ({
       type,
-      label: type === 'unassigned' ? 'Unassigned' : getRelationshipTypeLabel(type),
+      label: type === 'unassigned' ? 'Unassigned' : getRelationshipTypeLabel(type, customTypes),
       count,
       percentage: ((count / contacts.length) * 100).toFixed(0)
     }))
@@ -70,8 +72,10 @@ export const getRelationshipBreakdown = (contacts) => {
 
 /**
  * Get sector breakdown with finance sub-categories
+ * @param {Array} contacts - Array of contacts
+ * @param {Array} customSectors - Custom sectors from settings (optional)
  */
-export const getSectorBreakdown = (contacts) => {
+export const getSectorBreakdown = (contacts, customSectors = []) => {
   const counts = {};
   const financeSubcounts = {};
   
@@ -93,7 +97,7 @@ export const getSectorBreakdown = (contacts) => {
     .filter(([sector]) => !sector.startsWith('finance-'))
     .map(([sector, count]) => ({
       sector,
-      label: sector === 'unassigned' ? 'Unassigned' : getSectorLabel(sector),
+      label: sector === 'unassigned' ? 'Unassigned' : getSectorLabel(sector, customSectors),
       count,
       percentage: ((count / contacts.length) * 100).toFixed(0),
       subCategories: null
@@ -104,7 +108,7 @@ export const getSectorBreakdown = (contacts) => {
     const financeSubCategories = Object.entries(financeSubcounts)
       .map(([sector, count]) => ({
         sector,
-        label: getSectorLabel(sector).replace('Finance - ', ''),
+        label: getSectorLabel(sector, customSectors).replace('Finance - ', ''),
         count
       }))
       .sort((a, b) => b.count - a.count);
@@ -270,12 +274,17 @@ export const getClosenessDistribution = (contacts) => {
 
 /**
  * Get comprehensive network insights
+ * @param {Array} contacts - Array of contacts
+ * @param {Object} customSettings - Custom types from settings (optional)
+ * @param {Array} customSettings.relationshipTypes - Custom relationship types
+ * @param {Array} customSettings.sectors - Custom sectors
  */
-export const getNetworkInsights = (contacts) => {
+export const getNetworkInsights = (contacts, customSettings = {}) => {
+  const { relationshipTypes = [], sectors = [] } = customSettings;
   return {
     stats: getNetworkStats(contacts),
-    relationshipBreakdown: getRelationshipBreakdown(contacts),
-    sectorBreakdown: getSectorBreakdown(contacts),
+    relationshipBreakdown: getRelationshipBreakdown(contacts, relationshipTypes),
+    sectorBreakdown: getSectorBreakdown(contacts, sectors),
     interactionStats: getInteractionStats(contacts),
     topCompanies: getTopCompanies(contacts),
     topLocations: getTopLocations(contacts),
